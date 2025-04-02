@@ -1,1 +1,1 @@
-This repository features the code for "PASTA: Versatile Tyramine-oligonucleotide Amplification for Multi-modal Spatial Biology" by Michel et al. The code is designed to work with the csv files of single-cell features which is available on Zenodo.
+This repository features the code for "PASTA: Versatile Tyramine-oligonucleotide Amplification for Multi-modal Spatial Biology" by Michel et al. The code is designed to work with the csv files of single-cell features which is available on Zenodo. With this code, the violin plots in Figure 1 and Figure S1 can be generated.
