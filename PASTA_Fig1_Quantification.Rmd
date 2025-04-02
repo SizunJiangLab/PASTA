@@ -1,0 +1,444 @@
+---
+title: "PASTA_Figure1_Quantification"
+author: "Hendrik A. Michel"
+date: "2025-04-02"
+output: 
+    html_document:    
+        toc: true    
+        theme: default
+---
+
+```{r}
+#------------------------------------------------------------------------------
+# System Information
+#------------------------------------------------------------------------------
+# R version: 4.4.2 (2024-10-31)
+# Platform: x86_64-pc-linux-gnu
+# OS: Ubuntu 20.04.3 LTS
+# Locale: en_US.UTF-8
+# Time zone: America/New_York
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+# Critical Dependencies
+#------------------------------------------------------------------------------
+# Core packages:
+# - readr (2.1.5)
+# - dplyr (1.1.4)
+# - tidyr (1.3.1)
+# - stringr (1.5.1)
+# - ggplot2 (3.5.1)
+# - RColorBrewer (1.1.3)
+#------------------------------------------------------------------------------
+
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(RColorBrewer)
+sessionInfo()
+
+# Column names for metadata
+col_metadata <- c("source", "cellLabel", "Y_cent", "X_cent", "cellSize")
+```
+
+```{r functions}
+#' Create combined violin and box plots with customizable aesthetics
+#'
+#' @description
+#' Creates a visualization that combines violin plots showing distribution shapes
+#' with overlaid box plots showing statistical summaries. The x-axis uses a log10
+#' transformation by default.
+#'
+#' @param df A data frame containing the data to visualize
+#' @param x Character string specifying the column name for x-axis values (default: "x")
+#' @param y Character string specifying the column name for y-axis values (default: "y")
+#' @param aes_fill Character string specifying the column name for fill grouping
+#' @param fill_values Vector of colors to use for the fill aesthetic
+#' @param labs_x Character string for x-axis label
+#' @param labs_y Character string for y-axis label
+#' @param labs_title Character string for plot title
+#'
+#' @return A ggplot object containing the violin and box plot visualization
+#'
+plotting <- function(df, x = "x", y = "y", aes_fill, fill_values, labs_x, labs_y, labs_title) {
+    p <- df %>%
+        select(all_of(c("x" = x, "y" = y, "fill" = aes_fill))) %>%
+        ggplot(aes(x = x, y = y, fill = fill)) +
+        geom_violin(
+            adjust = 1.5,
+            scale = "width",
+            trim = TRUE
+        ) +
+        geom_boxplot(
+            width = 0.1,
+            outlier.shape = NA,
+            alpha = 0.5
+        ) +
+        scale_fill_manual(values = fill_values) +
+        scale_x_continuous(
+            trans = "log10",
+            breaks = c(0.1, 1.0, 10.0, 100.0, 0.05, 0.5, 5.0, 50.0),
+            labels = c("0.1", "1.0", "10.0", "100.0", "0.05", "0.5", "5.0", "50.0"),
+        ) +
+        labs(
+            x = labs_x,
+            y = labs_y,
+            title = labs_title,
+            fill = NULL
+        ) +
+        coord_cartesian(xlim = c(0.05, 200)) +
+        theme_minimal() +
+        theme(
+            axis.text.x = element_text(angle = 45, hjust = 1),
+            panel.grid.major.y = element_blank(),
+            panel.grid.major.x = element_line(color = "gray", linewidth = 0.5),
+            panel.grid.minor = element_blank()
+        )
+    return(p)
+}
+```
+
+# Load Data
+
+Load scaled single-cell feature data.
+
+- Slide 8 is the same as 02 with segmentation mask 03 and single-cell features 04_Supp1Fig1NotStripped.
+- Slide 9 is the same as 00 with segmentation mask 01 and single-cell features 04_Fig1Main_SuppFig1Stripped.
+
+```{r}
+# File paths
+slide8_top_f <- "data/04_SuppFig1NotStripped_top_SCFeatures_ScaleSize.csv"
+slide8_middle_f <- "data/04_SuppFig1NotStripped_middle_SCFeatures_ScaleSize.csv"
+slide8_bottom_f <- "data/04_SuppFig1NotStripped_bottom_SCFeatures_ScaleSize.csv"
+
+slide9_top_f <- "data/04_Fig1Main_SuppFig1Stripped_top_SCFeatures_ScaleSize.csv"
+slide9_middle_f <- "data/04_Fig1Main_SuppFig1Stripped_middle_SCFeatures_ScaleSize.csv"
+slide9_bottom_f <- "data/04_Fig1Main_SuppFig1Stripped_bottom_SCFeatures_ScaleSize.csv"
+
+# Wide data frames
+slide8_top <- read_csv(slide8_top_f)
+slide8_middle <- read_csv(slide8_middle_f)
+slide8_bottom <- read_csv(slide8_bottom_f)
+
+slide9_top <- read_csv(slide9_top_f)
+slide9_middle <- read_csv(slide9_middle_f)
+slide9_bottom <- read_csv(slide9_bottom_f)
+
+combined_slide8 <- bind_rows(
+    list(Top = slide8_top, Middle = slide8_middle, Bottom = slide8_bottom),
+    .id = "source"
+)
+combined_slide9 <- bind_rows(
+    list(Top = slide9_top, Middle = slide9_middle, Bottom = slide9_bottom),
+    .id = "source"
+)
+
+# Long data frames
+
+combined_slide8_long <- combined_slide8 %>%
+    pivot_longer(
+        cols = all_of(setdiff(colnames(combined_slide8), col_metadata)),
+        names_to = "Marker",
+        values_to = "Expression"
+    )
+combined_slide9_long <- combined_slide9 %>%
+    pivot_longer(
+        cols = all_of(setdiff(colnames(combined_slide9), col_metadata)),
+        names_to = "Marker",
+        values_to = "Expression"
+    )
+```
+
+# Figure 1B
+
+## Prepare Data for Plotting
+
+```{r}
+levels_source <- c("10µM", "5µM", "2.5µM", "Unamplified")
+levels_condition <- c("Signal", "Blank")
+
+# CD3
+col_metrics_cd3 <- c("CD3con250ms", "CD3con250msBL", "CD3tsaA250ms", "CD3tsaA250msBL")
+df_cd3 <- combined_slide9 %>%
+    group_by(source) %>%
+    mutate(
+        median_cd3con250ms = median(CD3con250ms),
+        CD3con250ms = CD3con250ms / median_cd3con250ms,
+        CD3con250msBL = CD3con250msBL / median_cd3con250ms,
+        CD3tsaA250ms = CD3tsaA250ms / median_cd3con250ms,
+        CD3tsaA250msBL = CD3tsaA250msBL / median_cd3con250ms,
+    ) %>%
+    ungroup() %>%
+    select(all_of(c(col_metadata, col_metrics_cd3))) %>%
+    pivot_longer(
+        cols = all_of(col_metrics_cd3),
+        names_to = "Marker",
+        values_to = "Expression"
+    ) %>%
+    mutate(
+        Marker = case_when(
+            Marker == "CD3con250ms" ~ "CD3 - Unamplified",
+            Marker == "CD3con250msBL" ~ "CD3 - Unamplified - Blank",
+            Marker == "CD3tsaA250ms" ~ "CD3 - PASTA",
+            Marker == "CD3tsaA250msBL" ~ "CD3 - PASTA - Blank",
+        ),
+        condition = if_else(str_detect(Marker, "Blank"), "Blank", "Signal"),
+        source = case_when(
+            source == "Top" ~ "10µM",
+            source == "Middle" ~ "5µM",
+            source == "Bottom" ~ "2.5µM",
+        ),
+        source = if_else(str_detect(Marker, "Unamplified"), "Unamplified", source),
+        x = Expression,
+        y = str_c(source, Marker, sep = " - "),
+    )
+levels_cd3_y <- df_cd3 %>%
+    distinct(source, condition, y) %>%
+    mutate(
+        source = factor(source, levels = levels_source),
+        condition = factor(condition, levels = levels_condition)
+    ) %>%
+    arrange(source, desc(condition)) %>%
+    pull(y)
+df_cd3$y <- factor(df_cd3$y, levels = levels_cd3_y)
+df_cd3$condition <- factor(df_cd3$condition, levels = levels_condition)
+
+# IBA1
+col_metrics_iba1 <- c("IBA1con250ms", "IBA1conBL250ms", "IBA1tsa250ms", "IBA1tsaBL250ms")
+df_iba1 <- combined_slide9 %>%
+    group_by(source) %>%
+    mutate(
+        median_iba1con250ms = median(IBA1con250ms),
+        IBA1con250ms = IBA1con250ms / median_iba1con250ms,
+        IBA1conBL250ms = IBA1conBL250ms / median_iba1con250ms,
+        IBA1tsa250ms = IBA1tsa250ms / median_iba1con250ms,
+        IBA1tsaBL250ms = IBA1tsaBL250ms / median_iba1con250ms
+    ) %>%
+    ungroup() %>%
+    select(all_of(c(col_metadata, col_metrics_iba1))) %>%
+    pivot_longer(
+        cols = all_of(col_metrics_iba1),
+        names_to = "Marker",
+        values_to = "Expression"
+    ) %>%
+    mutate(
+        Marker = case_when(
+            Marker == "IBA1con250ms" ~ "Iba1 - Unamplified",
+            Marker == "IBA1conBL250ms" ~ "Iba1 - Unamplified - Blank",
+            Marker == "IBA1tsaBL250ms" ~ "Iba1 - PASTA - Blank",
+            Marker == "IBA1tsa250ms" ~ "Iba1 - PASTA",
+        ),
+        condition = if_else(str_detect(Marker, "Blank"), "Blank", "Signal"),
+        source = case_when(
+            source == "Top" ~ "2.5µM",
+            source == "Middle" ~ "5µM",
+            source == "Bottom" ~ "10µM",
+        ),
+        source = if_else(str_detect(Marker, "Unamplified"), "Unamplified", source),
+        x = Expression,
+        y = str_c(source, Marker, sep = " - "),
+    )
+levels_iba1_y <- df_iba1 %>%
+    distinct(source, condition, y) %>%
+    mutate(
+        source = factor(source, levels = levels_source),
+        condition = factor(condition, levels = levels_condition)
+    ) %>%
+    arrange(source, desc(condition)) %>%
+    pull(y)
+df_iba1$y <- factor(df_iba1$y, levels = levels_iba1_y)
+df_iba1$condition <- factor(df_iba1$condition, levels = levels_condition)
+```
+
+## Generate and save plots
+
+```{r, fig.width=10, fig.height=4}
+fig_cd3 <- plotting(
+    df_cd3,
+    x = "x",
+    y = "y",
+    aes_fill = "condition",
+    fill_values = c("Signal" = "#4DAF4A", "Blank" = "#984EA3"),
+    labs_x = "Log10 (FC/Unamplified)",
+    labs_y = "Markers - Condition",
+    labs_title = "Figure 1B"
+)
+fig_cd3
+```
+
+```{r, fig.width=10, fig.height=4}
+fig_iba1 <- plotting(
+    df_iba1,
+    x = "x",
+    y = "y",
+    aes_fill = "condition",
+    fill_values = c("Signal" = "#4DAF4A", "Blank" = "#984EA3"),
+    labs_x = "Log10 (FC/Unamplified)",
+    labs_y = "Markers - Condition",
+    labs_title = "Figure 1B"
+)
+fig_iba1
+```
+
+```{r}
+ggsave("01_Fig1B_CD3.pdf", plot = fig_cd3, width = 10, height = 4, dpi = 300)
+ggsave("02_Fig1B_IBA1.pdf", plot = fig_iba1, width = 10, height = 4, dpi = 300)
+```
+
+# Figure 1C
+
+## Prepare Data for Plotting
+
+```{r}
+col_metrics_fig1c <- c(
+    "FASLcon50ms", "FASLtsa50ms",
+    "CD45RAcon50ms", "CD45RAtsa50ms",
+    "PDL1con250ms", "PDL1tsa250ms",
+    "CD20con250ms", "CD20tsa250ms",
+    "CD11ccon250ms", "CD11ctsaA250ms"
+)
+df_fig1c <- combined_slide9 %>%
+    group_by(source) %>%
+    mutate(
+        median_FASLcon50ms = median(FASLcon50ms),
+        FASLcon50ms = FASLcon50ms / median_FASLcon50ms,
+        FASLtsa50ms = FASLtsa50ms / median_FASLcon50ms,
+        median_CD45RAcon50ms = median(cd45RAcon50ms),
+        CD45RAcon50ms = cd45RAcon50ms / median_CD45RAcon50ms,
+        CD45RAtsa50ms = CD45RAtsa50ms / median_CD45RAcon50ms,
+        median_PDL1con250ms = median(PDL1con250ms),
+        PDL1con250ms = PDL1con250ms / median_PDL1con250ms,
+        PDL1tsa250ms = PDL1tsa250ms / median_PDL1con250ms,
+        median_CD20con250ms = median(CD20con250ms),
+        CD20con250ms = CD20con250ms / median_CD20con250ms,
+        CD20tsa250ms = CD20tsa250ms / median_CD20con250ms,
+        median_CD11ccon250ms = median(CD11ccon250ms),
+        CD11ccon250ms = CD11ccon250ms / median_CD11ccon250ms,
+        CD11ctsaA250ms = CD11ctsaA250ms / median_CD11ccon250ms
+    ) %>%
+    ungroup() %>%
+    select(all_of(c(col_metadata, col_metrics_fig1c))) %>%
+    pivot_longer(
+        cols = all_of(col_metrics_fig1c),
+        names_to = "Marker",
+        values_to = "Expression"
+    ) %>%
+    mutate(
+        combination = str_c(source, Marker, sep = " - "),
+        marker_name = str_extract(Marker, ".*(?=(con|tsa))"),
+        treatment = case_when(
+            str_detect(Marker, "con") ~ "Unamplified",
+            str_detect(Marker, "tsa") ~ "PASTA",
+        ),
+        x = Expression,
+        y = str_c(treatment, Marker, sep = " - "),
+    ) %>%
+    filter(combination %in% c(
+        "Middle - FASLtsa50ms", "Middle - FASLcon50ms",
+        "Middle - CD45RAtsa50ms", "Middle - CD45RAcon50ms",
+        "Top - PDL1tsa250ms", "Top - PDL1con250ms",
+        "Middle - CD20tsa250ms", "Middle - CD20con250ms",
+        "Bottom - CD11ctsaA250ms", "Bottom - CD11ccon250ms"
+    ))
+levels_marker <- c("CD11c", "CD20", "PDL1", "CD45RA", "FASL")
+levels_treatment <- c("Unamplified", "PASTA")
+levels_fig1c_y <- df_fig1c %>%
+    distinct(marker_name, treatment, y) %>%
+    mutate(
+        marker_name = factor(marker_name, levels = levels_marker),
+        treatment = factor(treatment, levels = levels_treatment)
+    ) %>%
+    arrange(marker_name, desc(treatment)) %>%
+    pull(y)
+df_fig1c$y <- factor(df_fig1c$y, levels = levels_fig1c_y)
+df_fig1c$treatment <- factor(df_fig1c$treatment, levels = levels_treatment)
+```
+
+## Generate and save plots
+
+```{r, fig.width=10, fig.height=5}
+fig_fig1c <- plotting(
+    df_fig1c,
+    x = "x",
+    y = "y",
+    aes_fill = "treatment",
+    fill_values = c("Unamplified" = "#FF7F00", "PASTA" = "#377EB8"),
+    labs_x = "Log10 (FC/Unamplified)",
+    labs_y = "Markers - Condition",
+    labs_title = "Figure 1C"
+)
+fig_fig1c
+```
+
+```{r}
+ggsave("03_Fig1C.pdf", plot = fig_fig1c, width = 10, height = 5, dpi = 300)
+```
+
+# Supp. Figure 1B
+
+## Prepare Data for Plotting
+
+```{r}
+df_cd11c_strip_slide8 <- combined_slide8 %>%
+    filter(source == "Bottom") %>%
+    mutate(
+        source = "Not Stripped",
+        Oligo1 = CD11ctsaA250ms / median(CD11ccon250ms),
+        Oligo2 = CD11ctsaB250ms / median(CD11ccon250ms),
+        Unamplified = CD11ccon250ms / median(CD11ccon250ms)
+    ) %>%
+    select(source, Oligo1, Oligo2, Unamplified)
+
+df_cd11c_strip_slide9 <- combined_slide9 %>%
+    filter(source == "Bottom") %>%
+    mutate(
+        source = "Stripped",
+        Oligo1 = CD11ctsaA250ms / median(CD11ccon250ms),
+        Oligo2 = CD11ctsaB250ms / median(CD11ccon250ms),
+        Unamplified = CD11ccon250ms / median(CD11ccon250ms)
+    ) %>%
+    select(source, Oligo1, Oligo2, Unamplified)
+
+df_sfig1b <- bind_rows(df_cd11c_strip_slide8, df_cd11c_strip_slide9) %>%
+    pivot_longer(cols = -c(source), names_to = "Marker", values_to = "FC") %>%
+    filter(Marker %in% c("Oligo1", "Oligo2", "Unamplified")) %>%
+    mutate(
+        Marker = factor(Marker, levels = c("Oligo2", "Oligo1", "Unamplified")),
+        x = FC,
+        y = str_c(Marker, source, sep = " - "),
+    )
+levels_marker <- c("Oligo2", "Oligo1", "Unamplified")
+levels_source <- c("Not Stripped", "Stripped")
+levels_sfig1b_y <- df_sfig1b %>%
+    distinct(Marker, source, y) %>%
+    mutate(
+        Marker = factor(Marker, levels = levels_marker),
+        source = factor(source, levels = levels_source)
+    ) %>%
+    arrange(Marker, desc(source)) %>%
+    pull(y)
+df_sfig1b$y <- factor(df_sfig1b$y, levels = levels_sfig1b_y)
+df_sfig1b$Marker <- factor(df_sfig1b$Marker, levels = levels_marker)
+```
+
+## Generate and save plots
+
+```{r, fig.width=10, fig.height=4}
+fig_cd11c_stripping <- plotting(
+    df_sfig1b,
+    x = "x",
+    y = "y",
+    aes_fill = "source",
+    fill_values = c("Not Stripped" = "#E41A1C", "Stripped" = "#377EB8"),
+    labs_x = "Log10 (FC/Unamplified)",
+    labs_y = "Condition - Treatment",
+    labs_title = "Supp. Fig1B"
+)
+fig_cd11c_stripping
+```
+
+```{r}
+ggsave("04_SuppFig1B.pdf", plot = fig_cd11c_stripping, width = 10, height = 4, dpi = 300)
+```
