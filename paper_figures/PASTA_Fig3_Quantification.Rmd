@@ -1,0 +1,1089 @@
+---
+title: "PASTA_Figure3_Quantification"
+author: "Hendrik A. Michel"
+date: "2026-02-08"
+output: 
+    html_document:    
+        toc: true    
+        theme: default
+---
+
+```{r, message=FALSE}
+#------------------------------------------------------------------------------
+# System Information
+#------------------------------------------------------------------------------
+# R version: 4.4.2 (2024-10-31)
+# Platform: x86_64-pc-linux-gnu
+# OS: Ubuntu 20.04.3 LTS
+# Locale: en_US.UTF-8
+# Time zone: America/New_York
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+# Critical Dependencies
+#------------------------------------------------------------------------------
+# Core packages:
+# - readr (2.1.5)
+# - dplyr (1.1.4)
+# - tidyr (1.3.1)
+# - stringr (1.5.1)
+# - ggplot2 (3.5.2)
+# - scales (1.4.0)
+# - patchwork (1.3.0)
+# - ggh4x (0.3.1)
+# - ggrastr (1.0.2)
+#------------------------------------------------------------------------------
+
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(scales)
+library(patchwork)
+library(ggh4x)
+library(ggrastr)
+sessionInfo()
+```
+
+# Functions
+```{r}
+# =============================================================================
+# SETUP: Factor Levels and Color Palettes (Define Once)
+# =============================================================================
+
+#' Setup Plotting Constants
+#'
+#' Creates a list containing standardized color palettes and factor level orderings
+#' for consistent plotting across all figures. Includes annotation colors, disease colors,
+#' and ordering for cores, annotations, and diseases.
+#'
+#' @return A list with named elements: annotation_colors, disease_colors, core_levels,
+#'   annotation_levels, and disease_levels
+#' @export
+setup_plotting_constants <- function() {
+  list(
+    annotation_colors = c(
+      "Other" = "black",
+      "CD4T" = "#E41A1C",
+      "CD8T" = "#377EB8",
+      "Treg" = "#4DAF4A",
+      "NK" = "#984EA3",
+      "DC" = "#999999",
+      "M1" = "#FFFF33",
+      "M2" = "#A65628",
+      "B" = "#66C2A5",
+      "Tumor" = "#FC8D62"
+    ),
+    
+    disease_colors = c(
+      "Hodgkin" = "#1B9E77",
+      "Healthy" = "#7570B3",
+      "DLBCL" = "#E6AB02"
+    ),
+    
+    core_levels = c("C-1", "C-2", "D-2", "E-1", "A-3", "B-3", "B-4", "C-4", "E-3", 
+                    "A-1", "B-2", "C-3", "D-4", "Tonsil"),
+    
+    annotation_levels = c("Other", "CD4T", "CD8T", "Treg", "NK", "DC", "M1", "M2", "B", "Tumor"),
+    
+    disease_levels = c("Hodgkin", "DLBCL", "Healthy")
+  )
+}
+
+# =============================================================================
+# HELPER: Apply Factor Levels to Data
+# =============================================================================
+
+#' Apply Factor Levels to Data Frame
+#'
+#' Applies standardized factor levels to core, annotation, and disease columns
+#' in a data frame if those columns exist. Uses levels defined in plotting constants
+#' to ensure consistent ordering across all plots.
+#'
+#' @param df Data frame to apply factor levels to
+#' @param constants List of plotting constants from setup_plotting_constants().
+#'   Defaults to calling setup_plotting_constants() internally.
+#'
+#' @return Data frame with factorized columns where applicable
+#' @export
+apply_factor_levels <- function(df, constants = setup_plotting_constants()) {
+  df_out <- df
+  
+  if ("core" %in% names(df)) {
+    df_out$core <- factor(df_out$core, levels = constants$core_levels)
+  }
+  
+  if ("annotation" %in% names(df)) {
+    df_out$annotation <- factor(df_out$annotation, levels = constants$annotation_levels)
+  }
+  
+  if ("disease" %in% names(df)) {
+    df_out$disease <- factor(df_out$disease, levels = constants$disease_levels)
+  }
+  
+  return(df_out)
+}
+```
+
+## Load helper function
+```{r}
+constants <- setup_plotting_constants()
+```
+
+
+# Load data frames for all quantifications
+## Load data frames
+```{r}
+
+annotation <- read_csv("data/Fig3/04_final_data/Fig3_final_annotation.csv") %>%
+  select(-clustering_id)
+
+df_normRawFeatures <- read_csv("data/Fig3/04_final_data/Fig3_NormFeaturesCellData.csv") %>%
+  filter(TMA == "A4")
+
+df_normPercentileFeatures <- read_csv("data/Fig3/04_final_data/Fig3_NormPercentileFeaturesCellData.csv")
+
+df_finalFeatures <- read_csv("data/Fig3/04_final_data/Fig3_FinalFeaturesCellData.csv")
+
+```
+
+## Merge metadata
+```{r}
+## Add core annotation
+Hodgkin <- c("C-1", "C-2", "D-2", "E-1")
+DLBCL <- c("A-3", "B-3", "B-4", "C-4", "E-3")
+Healthy <- c("A-1", "B-2", "C-3", "D-4", "Tonsil")
+
+annotation <- annotation %>%
+  mutate(disease = case_when(
+  core %in% Hodgkin ~ "Hodgkin",
+  core %in% DLBCL ~ "DLBCL",
+  core %in% Healthy ~ "Healthy",
+  TRUE ~ NA
+  ))
+```
+
+## Merge data frames to annotate expression data
+```{r}
+
+#' Clean Cell Label Formatting
+#'
+#' Converts cell labels from scientific notation (e.g., "1e+05") to standard numeric
+#' format (e.g., "100000") and removes trailing decimal zeros. Ensures consistent
+#' cell label formatting for merging with annotation data.
+#'
+#' @param x Character or numeric vector of cell labels
+#'
+#' @return Character vector of cleaned cell labels
+#' @export
+cellLabel_clean <- function(x) {
+  x <- as.character(x)
+
+  # Convert values like "1e+05" to "100000"
+  is_sci <- str_detect(x, regex("^[+-]?(\\d+(\\.\\d*)?|\\.\\d+)[eE][+-]?\\d+$"))
+  x[is_sci] <- format(as.numeric(x[is_sci]), scientific = FALSE, trim = TRUE)
+
+  # If they became "100000.0", drop trailing .0
+  x <- str_replace(x, "\\.0$", "")
+
+  str_trim(x)
+}
+
+df_normRawFeatures_annotated <- df_normRawFeatures %>%
+  mutate(
+    cellLabel = cellLabel_clean(cellLabel),
+    cellLabel = paste0("c", as.character(cellLabel)),
+    unit_id = interaction(TMA, core, cellLabel, sep = "_")
+  ) %>%
+  select(-c(TMA, core, cellLabel)) %>%
+  left_join(., annotation, by = "unit_id")
+
+df_normPercentileFeatures_annotated <- df_normPercentileFeatures %>%
+  mutate(
+    cellLabel = cellLabel_clean(cellLabel),
+    cellLabel = paste0("c", as.character(cellLabel)),
+    unit_id = interaction(TMA, core, cellLabel, sep = "_")
+  ) %>%
+  select(-c(TMA, core, cellLabel)) %>%
+  left_join(., annotation, by = "unit_id")
+
+df_finalFeatures_annotated <- df_finalFeatures %>%
+  mutate(
+    cellLabel = cellLabel_clean(cellLabel),
+    cellLabel = paste0("c", as.character(cellLabel)),
+    unit_id = interaction(TMA, core, cellLabel, sep = "_")
+  ) %>%
+  select(-c(TMA, core, cellLabel)) %>%
+  full_join(., annotation, by = "unit_id")
+
+
+```
+
+# Main Figures
+## Figure 3C
+```{r}
+## Get proportion of all cell types by core by TMA
+df_prop <- annotation %>%
+  group_by(core, annotation, TMA) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  group_by(core, TMA) %>%
+  mutate(proportion = count/sum(count)) %>%
+  apply_factor_levels(constants)
+
+## Change shape of df
+plot_df <- df_prop %>%
+  select(-count) %>%
+  pivot_wider(names_from = TMA, values_from = proportion, values_fill = 0)
+
+## Generate correlation data
+fit <- lm(A3 ~ A4, data = plot_df)
+
+stats <- plot_df %>%
+  summarise(
+    r  = cor(A4, A3, use = "complete.obs"),
+    r2 = summary(lm(A3 ~ A4))$r.squared
+  )
+
+fig3c <- plot_df %>%
+  ggplot(aes(x = A4, y = A3, color = annotation)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray60") +
+  geom_point(size = 6, alpha = 0.95) +
+  scale_color_manual(values = constants$annotation_colors, na.value = "black") +
+  theme_minimal(base_size = 13) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))
+
+print(fig3c)
+
+fig3c <- fig3c +
+  theme(legend.position = "none")
+
+ggsave("output/Fig3/Fig3C.pdf", create.dir = TRUE, width = 5, height = 5, units = "in", dpi = 300)
+```
+
+## Figure 3D
+```{r}
+df <- df_normPercentileFeatures_annotated %>%
+  apply_factor_levels(constants)
+
+df_3D <- df %>%
+  filter((annotation == "Tumor" & disease != "Healthy") | (annotation == "B" & disease == "Healthy")) %>%
+  select(CXCR5, `CXCR5-RNA`, core, disease, cell_id, cellSize) %>%
+  pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
+  group_by(core, disease, marker) %>%
+  summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop")
+
+fig3d <- ggplot(df_3D, aes(x = marker, y = median_expression, fill = disease)) +
+  geom_violin(scale = "width",
+              width = 0.5,
+              trim = TRUE,
+              draw_quantiles = 0.5,
+              position = position_dodge(width = 0.9)) +
+  geom_point(position = position_jitterdodge(
+               jitter.width = 0.15,
+               dodge.width = 0.9
+             ),
+             size = 1.5,
+             alpha = 1) +
+  scale_fill_manual(values = constants$disease_colors) +
+  lims(y = c(0, 1)) +
+  labs(y = "Median Expression", x = "") +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank())
+
+print(fig3d)
+
+fig3d <- fig3d +
+  theme(legend.position = "none")
+
+ggsave("output/Fig3/Fig3D.pdf", width = 10, height = 5, units = "in", dpi = 300)
+```
+
+## Figure 3E
+```{r}
+df <- df_normPercentileFeatures_annotated %>%
+  apply_factor_levels(constants)
+
+df_3E <- df %>%
+  filter(annotation %in% c("CD4T", "CD8T", "Treg")) %>%
+  select(CD69, `CTLA-4`, core, disease, cell_id, cellSize, annotation) %>%
+  pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
+  group_by(core, disease, marker, annotation) %>%
+  summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop")
+
+fig3e <- ggplot(df_3E, aes(x = interaction(annotation, marker, sep = "|"), y = median_expression, fill = disease)) +
+  geom_violin(scale = "width",
+              width = 0.5,
+              trim = TRUE,
+              draw_quantiles = 0.5,
+              position = position_dodge(width = 0.9)) +
+  geom_point(position = position_jitterdodge(
+               jitter.width = 0.15,
+               dodge.width = 0.9
+             ),
+             size = 1.5,
+             alpha = 1) +
+  scale_fill_manual(values = constants$disease_colors) +
+  lims(y = c(0, 1)) +
+  labs(x = "", y = "Median Expression") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank())
+
+print(fig3e)
+
+fig3e <- fig3e +
+  theme(legend.position = "none")
+
+ggsave("output/Fig3/Fig3E.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
+```
+
+## Figure 3F
+```{r}
+df <- df_normRawFeatures_annotated %>%
+  apply_factor_levels(constants)
+
+## CD57
+df_3F_CD57 <- df %>%
+  filter(annotation %in% c("CD4T", "CD8T", "Treg")) %>%
+  select(redo_CD57con, redo_CD57Tyr, core, disease, cell_id, cellSize, annotation) %>%
+  pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
+  group_by(core, disease, marker, annotation) %>%
+  summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop") %>%
+  mutate(median_expression = 2000 * median_expression)
+
+ggplot(df_3F_CD57, aes(x = interaction(marker, annotation, sep = "|"), y = median_expression, fill = disease)) +
+  geom_violin(scale = "width",
+              width = 0.5,
+              trim = TRUE,
+              draw_quantiles = 0.5,
+              position = position_dodge(width = 0.9)) +
+  geom_point(position = position_jitterdodge(
+               jitter.width = 0.15,
+               dodge.width = 0.9
+             ),
+             size = 1.5,
+             alpha = 1) +
+  scale_fill_manual(values = constants$disease_colors) +
+  scale_y_continuous(trans = "log10",
+                     breaks = c(0.1, 1, 10, 100),
+                     minor_breaks = c(0.5, 5, 50),
+                     limits = c(0.3, 100)) +
+  labs(x = "", y = "Median Expression") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank())
+
+ggsave("output/Fig3/Fig3F_CD57.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
+
+## ICOS
+df_3F_ICOS <- df %>%
+  filter(annotation %in% c("CD4T", "CD8T", "Treg")) %>%
+  select(redo_ICOScon, redo_ICOSTyr, core, disease, cell_id, cellSize, annotation) %>%
+  pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
+  group_by(core, disease, marker, annotation) %>%
+  summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop") %>%
+  mutate(median_expression = 1000 * median_expression)
+
+ggplot(df_3F_ICOS, aes(x = interaction(marker, annotation, sep = "|"), y = median_expression, fill = disease)) +
+  geom_violin(scale = "width",
+              width = 0.5,
+              trim = TRUE,
+              draw_quantiles = 0.5,
+              position = position_dodge(width = 0.9)) +
+  geom_point(position = position_jitterdodge(
+               jitter.width = 0.15,
+               dodge.width = 0.9
+             ),
+             size = 1.5,
+             alpha = 1) +
+  scale_fill_manual(values = constants$disease_colors) +
+  scale_y_continuous(trans = "log10",
+                     breaks = c(0.1, 1, 10, 100, 1000),
+                     minor_breaks = c(0.5, 5, 50, 500),
+                     limits = c(0.1, 2000)) +
+  labs(x = "", y = "Median Expression") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank())
+
+ggsave("output/Fig3/Fig3F_ICOS.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
+```
+
+# Supplemental Figures
+## Figure S5B
+```{r}
+
+annotation_markers = c("CD3con", "cd4", "CD8", "FoxP3", "CD11c", "CD68", "CD163", "CD30", "CD56", "CD45", "CD20", "Pax5")
+
+df_combined <- df_finalFeatures_annotated %>%
+  select(unit_id, TMA, core, TMA_core, annotation, disease, all_of(annotation_markers))
+
+#' Plot Annotation Marker Heatmap
+#'
+#' Creates a composite plot with cell count histogram and marker expression heatmap.
+#' Computes either mean expression or z-scores per annotation group. Supports filtering
+#' by TMA, core, and disease, with customizable color scales and annotation ordering.
+#' Uses Arial bold font at specified sizes.
+#'
+#' @param df Data frame containing annotation and marker expression columns
+#' @param annotation_markers Character vector of marker column names to include
+#' @param type Character, either "mean" for mean expression or "zscore" for z-score calculation
+#' @param TMA Optional character vector to filter by TMA values
+#' @param core Optional character vector to filter by core values
+#' @param disease Optional character vector to filter by disease values
+#' @param annotation_levels Optional character vector specifying annotation ordering
+#' @param marker_levels Optional character vector specifying marker ordering (top to bottom)
+#' @param mean_fill_limits Optional numeric vector c(min, max) for mean color scale limits
+#' @param z_fill_limits Optional numeric vector c(min, max) for z-score color scale limits
+#' @param z_midpoint Numeric, midpoint value for z-score color scale (default = 0)
+#' @param annotation_colors Optional named character vector of colors for annotations
+#' @param tile_border Character, color for tile borders (default = "black")
+#' @param legend Logical, whether to show heatmap legend (default = FALSE)
+#'
+#' @return A patchwork plot object combining histogram and heatmap
+#' @export
+plot_annotation_marker_heatmap <- function(
+  df,
+  annotation_markers,
+  type = c("mean", "zscore"),
+  TMA = NULL,
+  core = NULL,
+  disease = NULL,
+  annotation_levels = NULL,
+  marker_levels = NULL,
+  mean_fill_limits = NULL,
+  z_fill_limits = NULL,
+  z_midpoint = 0,
+  annotation_colors = NULL,
+  tile_border = "black",
+  legend = FALSE
+) {
+  type <- match.arg(type)
+
+  stopifnot(requireNamespace("dplyr", quietly = TRUE))
+  stopifnot(requireNamespace("tidyr", quietly = TRUE))
+  stopifnot(requireNamespace("ggplot2", quietly = TRUE))
+  stopifnot(requireNamespace("patchwork", quietly = TRUE))
+
+  validate_limits <- function(lims, name) {
+    if (is.null(lims)) return(NULL)
+    if (!is.numeric(lims) || length(lims) != 2 || any(!is.finite(lims))) {
+      stop(name, " must be NULL or a numeric vector of length 2 with finite values.")
+    }
+    if (lims[1] >= lims[2]) stop(name, " must be increasing, like c(min, max).")
+    lims
+  }
+  mean_fill_limits <- validate_limits(mean_fill_limits, "mean_fill_limits")
+  z_fill_limits    <- validate_limits(z_fill_limits, "z_fill_limits")
+
+  needed_cols <- c("annotation", annotation_markers)
+  missing_cols <- setdiff(needed_cols, colnames(df))
+  if (length(missing_cols) > 0) stop("Missing columns in df: ", paste(missing_cols, collapse = ", "))
+
+  # optional subsetting
+  if (!is.null(TMA)) {
+    if (!"TMA" %in% names(df)) stop("Filter TMA supplied but df has no column named 'TMA'.")
+    df <- df[df$TMA %in% TMA, , drop = FALSE]
+  }
+  if (!is.null(core)) {
+    if (!"core" %in% names(df)) stop("Filter core supplied but df has no column named 'core'.")
+    df <- df[df$core %in% core, , drop = FALSE]
+  }
+  if (!is.null(disease)) {
+    if (!"disease" %in% names(df)) stop("Filter disease supplied but df has no column named 'disease'.")
+    df <- df[df$disease %in% disease, , drop = FALSE]
+  }
+
+  long <- df |>
+    dplyr::select(dplyr::all_of(c("annotation", annotation_markers))) |>
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(annotation_markers),
+      names_to = "marker",
+      values_to = "value"
+    )
+
+  counts <- long |>
+    dplyr::count(annotation, name = "n_cells")
+
+  if (is.null(annotation_levels)) annotation_levels <- sort(unique(long$annotation))
+  if (is.null(marker_levels))     marker_levels <- annotation_markers
+
+  if (type == "mean") {
+    heat <- long |>
+      dplyr::group_by(annotation, marker) |>
+      dplyr::summarise(plot_value = mean(value, na.rm = TRUE), .groups = "drop")
+  } else {
+    pop_stat <- long |>
+      dplyr::group_by(marker) |>
+      dplyr::summarise(
+        pop_mean = mean(value, na.rm = TRUE),
+        pop_sd   = stats::sd(value, na.rm = TRUE),
+        .groups = "drop"
+      )
+
+    ann_mean <- long |>
+      dplyr::group_by(annotation, marker) |>
+      dplyr::summarise(mu = mean(value, na.rm = TRUE), .groups = "drop")
+
+    heat <- ann_mean |>
+      dplyr::left_join(pop_stat, by = "marker") |>
+      dplyr::mutate(
+        plot_value = dplyr::if_else(is.finite(pop_sd) & pop_sd > 0,
+                                    (mu - pop_mean) / pop_sd,
+                                    0)
+      ) |>
+      dplyr::select(annotation, marker, plot_value)
+  }
+
+  heat$annotation   <- factor(heat$annotation, levels = annotation_levels)
+  counts$annotation <- factor(counts$annotation, levels = annotation_levels)
+  heat$marker       <- factor(heat$marker, levels = rev(marker_levels))
+
+  heat <- heat |>
+    dplyr::filter(!is.na(annotation), !is.na(marker)) |>
+    tidyr::complete(annotation, marker)
+
+  counts <- counts |>
+    dplyr::filter(!is.na(annotation)) |>
+    tidyr::complete(annotation, fill = list(n_cells = 0))
+
+  clip_to_limits <- function(x, lims) {
+    if (is.null(lims)) return(x)
+    dplyr::if_else(is.na(x), x, pmin(pmax(x, lims[1]), lims[2]))
+  }
+  if (type == "mean"   && !is.null(mean_fill_limits)) heat$plot_value <- clip_to_limits(heat$plot_value, mean_fill_limits)
+  if (type == "zscore" && !is.null(z_fill_limits))    heat$plot_value <- clip_to_limits(heat$plot_value, z_fill_limits)
+
+  base_theme <- ggplot2::theme_minimal(base_size = 8, base_family = "Arial") +
+    ggplot2::theme(
+      text = ggplot2::element_text(face = "bold", family = "Arial", size = 8),
+      axis.title = ggplot2::element_text(size = 10, face = "bold", family = "Arial"),
+      axis.text  = ggplot2::element_text(size = 8,  face = "bold", family = "Arial"),
+      legend.text  = ggplot2::element_text(size = 8,  face = "bold", family = "Arial"),
+      legend.title = ggplot2::element_text(size = 10, face = "bold", family = "Arial")
+    )
+
+  p_hist <- ggplot2::ggplot(
+    counts,
+    ggplot2::aes(x = annotation, y = n_cells, fill = annotation)
+  ) +
+    ggplot2::geom_col(show.legend = FALSE) +
+    ggplot2::labs(x = NULL, y = "Cell Number") +
+    base_theme +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank(),
+      panel.grid.major.x = ggplot2::element_blank(),
+      panel.grid.minor.y = ggplot2::element_blank(),
+      panel.grid.minor.x = ggplot2::element_blank(),
+      axis.title.y = element_blank()
+    )
+
+  if (!is.null(annotation_colors)) {
+    p_hist <- p_hist +
+      ggplot2::scale_fill_manual(values = annotation_colors, na.value = "grey70", drop = FALSE)
+  } else {
+    p_hist <- p_hist +
+      ggplot2::scale_fill_manual(values = setNames(rep("grey70", length(annotation_levels)), annotation_levels), drop = FALSE)
+  }
+
+  p_heat <- ggplot2::ggplot(
+    heat,
+    ggplot2::aes(x = annotation, y = marker, fill = plot_value)
+  ) +
+    ggplot2::geom_tile(color = tile_border, linewidth = 0.3) +
+    ggplot2::labs(x = "Cell Type", y = "Annotation Marker") +
+    base_theme +
+    ggplot2::theme(
+      panel.grid = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1, colour = "black"),
+      axis.text.y = ggplot2::element_text(colour = "black"),
+      axis.title.x = ggplot2::element_blank(),
+      axis.title.y = ggplot2::element_blank()
+    )
+  
+  if(legend == FALSE){
+    p_heat <- p_heat +
+      theme(legend.position = "none")
+  }
+
+  if (type == "mean") {
+    p_heat <- p_heat +
+      ggplot2::scale_fill_gradient(
+        low = "white", high = "red",
+        limits = mean_fill_limits,
+        na.value = "white",
+        name = "Mean"
+      )
+  } else {
+    p_heat <- p_heat +
+      ggplot2::scale_fill_gradient2(
+        low = "blue", mid = "white", high = "red",
+        midpoint = z_midpoint,
+        limits = z_fill_limits,
+        na.value = "white",
+        name = "Z-score"
+      )
+  }
+
+  p_hist / p_heat + patchwork::plot_layout(heights = c(1, 4))
+}
+
+## Set marker order
+marker_levels <- c("CD45", "CD3con", "CD8", "cd4", "FoxP3", "CD56", "CD11c", "CD68", "CD163", "CD20", "Pax5", "CD30")
+
+## Hodgkin
+annotation_levels_HD <- c("CD8T", "CD4T", "Treg", "NK", "DC", "M1", "M2", "B", "Tumor", "Other")
+
+p_A3_HD <- plot_annotation_marker_heatmap(
+  df_combined,
+  annotation_markers,
+  type = "zscore",
+  z_fill_limits = c(-2, 2),
+  annotation_levels = annotation_levels_HD,
+  marker_levels = marker_levels,
+  TMA = "A3",
+  disease = "Hodgkin",
+  annotation_colors = constants$annotation_colors
+)
+
+p_A4_HD <- plot_annotation_marker_heatmap(
+  df_combined,
+  annotation_markers,
+  type = "zscore",
+  z_fill_limits = c(-2, 2),
+  annotation_levels = annotation_levels_HD,
+  marker_levels = marker_levels,
+  TMA = "A4",
+  disease = "Hodgkin",
+  annotation_colors = constants$annotation_colors
+)
+
+## DLBCL
+annotation_levels_DLBCL <- c("CD8T", "CD4T", "Treg", "NK", "DC", "M1", "M2", "Tumor", "Other")
+
+p_A3_DLBCL <- plot_annotation_marker_heatmap(
+  df_combined,
+  annotation_markers,
+  type = "zscore",
+  z_fill_limits = c(-2, 2),
+  annotation_levels = annotation_levels_DLBCL,
+  marker_levels = marker_levels,
+  TMA = "A3",
+  disease = "DLBCL",
+  annotation_colors = constants$annotation_colors
+)
+
+p_A4_DLBCL <- plot_annotation_marker_heatmap(
+  df_combined,
+  annotation_markers,
+  type = "zscore",
+  z_fill_limits = c(-2, 2),
+  annotation_levels = annotation_levels_DLBCL,
+  marker_levels = marker_levels,
+  TMA = "A4",
+  disease = "DLBCL",
+  annotation_colors = constants$annotation_colors
+)
+
+## Healthy
+annotation_levels_Healthy <- c("CD8T", "CD4T", "Treg", "NK", "DC", "M1", "M2", "B", "Other")
+
+p_A3_Healthy <- plot_annotation_marker_heatmap(
+  df_combined,
+  annotation_markers,
+  type = "zscore",
+  z_fill_limits = c(-2, 2),
+  annotation_levels = annotation_levels_Healthy,
+  marker_levels = marker_levels,
+  TMA = "A3",
+  disease = "Healthy",
+  annotation_colors = constants$annotation_colors
+)
+
+p_A4_Healthy <- plot_annotation_marker_heatmap(
+  df_combined,
+  annotation_markers,
+  type = "zscore",
+  z_fill_limits = c(-2, 2),
+  annotation_levels = annotation_levels_Healthy,
+  marker_levels = marker_levels,
+  TMA = "A4",
+  disease = "Healthy",
+  annotation_colors = constants$annotation_colors
+)
+
+## Plotting legend separately
+p_legend <- plot_annotation_marker_heatmap(
+  df_combined,
+  annotation_markers,
+  type = "zscore",
+  z_fill_limits = c(-2, 2),
+  annotation_levels = annotation_levels_Healthy,
+  marker_levels = marker_levels,
+  TMA = "A4",
+  disease = "Healthy",
+  annotation_colors = constants$annotation_colors,
+  legend = TRUE
+)
+
+ggsave("output/SuppsFig3/FigS5B_CODEX_Hodgkin.pdf", create.dir = TRUE, plot = p_A3_HD, device = cairo_pdf,
+       width = 2.5, height = 2.5, units = "in")
+ggsave("output/SuppsFig3/FigS5B_PASTA_Hodgkin.pdf", plot = p_A4_HD, device = cairo_pdf,
+       width = 2.5, height = 2.5, units = "in")
+ggsave("output/SuppsFig3/FigS5B_CODEX_DLBCL.pdf", plot = p_A3_DLBCL, device = cairo_pdf,
+       width = 2.5, height = 2.5, units = "in")
+ggsave("output/SuppsFig3/FigS5B_PASTA_DLBCL.pdf", plot = p_A4_DLBCL, device = cairo_pdf,
+       width = 2.5, height = 2.5, units = "in")
+ggsave("output/SuppsFig3/FigS5B_CODEX_LNT.pdf", plot = p_A3_Healthy, device = cairo_pdf,
+       width = 2.5, height = 2.5, units = "in")
+ggsave("output/SuppsFig3/FigS5B_PASTA_LNT.pdf", plot = p_A4_Healthy, device = cairo_pdf,
+       width = 2.5, height = 2.5, units = "in")
+ggsave("output/SuppsFig3/FigS5B_heatmap_legend.pdf", plot = p_legend, device = cairo_pdf,
+       width = 2.5, height = 2.5, units = "in")
+
+print(p_A3_HD)
+print(p_A4_HD)
+print(p_A3_DLBCL)
+print(p_A4_DLBCL)
+print(p_A3_Healthy)
+print(p_A4_Healthy)
+print(p_legend)
+
+```
+
+
+## Figure S7A
+
+```{r}
+df <- annotation %>%
+  group_by(core, annotation, TMA, disease) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  group_by(core, TMA) %>%
+  mutate(proportion = count/sum(count)) %>%
+  select(-count)
+
+## Build a per-core disease lookup
+core_disease <- df %>%
+  distinct(core, disease) %>%
+  group_by(core) %>%
+  slice(1) %>%
+  ungroup()
+
+## Summarize and pivot
+df_sum <- df %>%
+  filter(TMA %in% c("A3", "A4")) %>%
+  group_by(core, annotation, TMA) %>%
+  summarise(proportion = mean(proportion, na.rm = TRUE), .groups = "drop")
+
+df_wide <- df_sum %>%
+  pivot_wider(names_from = TMA, values_from = proportion, values_fill = NA_real_) %>%
+  left_join(core_disease, by = "core")
+
+## Compute correlation between A3 and A4 across cores
+min_pairs <- 3
+
+corr_table <- df_wide %>%
+  group_by(annotation, disease) %>%
+  summarise(
+    n_pairs = sum(!is.na(A3) & !is.na(A4)),
+    r = ifelse(n_pairs >= min_pairs,
+               cor(A3, A4, use = "pairwise.complete.obs", method = "pearson"),
+               NA_real_),
+    .groups = "drop"
+  ) %>%
+  mutate(r = ifelse(is.finite(r), pmin(1, pmax(-1, r)), NA_real_),
+         r_label = ifelse(is.na(r), NA, formatC(r, format = "f", digits = 2)))
+
+## Pooled correlation
+pooled_corr <- df_wide %>%
+  filter(!is.na(A3), !is.na(A4)) %>%
+  group_by(disease) %>%
+  summarise(
+    n_pairs = n(),
+    r = cor(A3, A4, method = "pearson"),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    annotation = "Total",
+    r_label = formatC(r, format = "f", digits = 2)
+  )
+
+## Combine and factor
+plot_df <- bind_rows(corr_table, pooled_corr) %>%
+  complete(annotation, disease) %>%
+  arrange(disease, annotation)
+
+plot_df$annotation <- factor(
+  plot_df$annotation,
+  levels = c("CD4T", "CD8T", "Treg", "NK", "DC", "M1", "M2", "B", "Tumor", "Other", "Total")
+)
+
+plot_df$disease <- factor(
+  plot_df$disease,
+  levels = c("Healthy", "DLBCL", "Hodgkin")
+)
+
+## Heatmap
+heatmap_plot <- ggplot(plot_df, aes(x = annotation, y = disease, fill = r)) +
+  geom_tile(color = "grey80", size = 0.25) +
+  geom_text(aes(label = r_label), na.rm = TRUE, size = 3) +
+  scale_fill_gradient2(
+    low = "white", high = "red",
+    midpoint = 0, na.value = "grey95",
+    limits = c(0, 1),
+    name = "Pearson r"
+  ) +
+  labs(x = "", y = "") +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid = element_blank()
+  )
+
+print(heatmap_plot)
+
+ggsave("output/SuppsFig3/FigS7A.pdf", width = 4.5, height = 2.25, units = "in", dpi = 300)
+```
+
+
+## Figure S7B
+```{r}
+df <- df_normRawFeatures_annotated %>%
+  apply_factor_levels(constants)
+
+df_CD3Tyr <- df %>%
+  filter(annotation %in% c("CD4T", "CD8T", "Treg")) %>%
+  select(CD3con, CD3Tyr, core, disease, cell_id, cellSize, annotation) %>%
+  pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
+  group_by(core, disease, marker, annotation) %>%
+  summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop") %>%
+  mutate(median_expression = 10 * median_expression)
+
+ggplot(df_CD3Tyr, aes(x = interaction(marker, annotation, sep = "|"), y = median_expression, fill = disease)) +
+  geom_violin(scale = "width",
+              width = 0.5,
+              trim = TRUE,
+              draw_quantiles = 0.5,
+              position = position_dodge(width = 0.9)) +
+  geom_point(position = position_jitterdodge(
+               jitter.width = 0.15,
+               dodge.width = 0.9
+             ),
+             size = 1.5,
+             alpha = 1) +
+  scale_fill_manual(values = constants$disease_colors) +
+  scale_y_continuous(trans = "log10",
+                     breaks = c(0.001, 0.01, 0.1, 1, 10, 100, 1000),
+                     minor_breaks = c(0.005, 0.05, 0.5, 5, 50, 500)) +
+  labs(x = "", y = "Median Expression") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.y = element_blank())
+
+ggsave("output/SuppsFig3/FigS7B.pdf", width = 9, height = 10, units = "in", dpi = 300)
+
+```
+
+## Figure S8A
+```{r}
+df <- df_normPercentileFeatures_annotated %>%
+  select(unit_id, TMA, core, TMA_core, disease, annotation, CXCR5, `CXCR5-RNA`) %>%
+  apply_factor_levels(constants)
+
+df_RNA_protein <- df %>%
+  mutate(
+    CXCR5 = 100000 * CXCR5,
+    `CXCR5-RNA` = 100000 * `CXCR5-RNA`
+  )
+
+#' Format Axis Labels to Show Exponent Only
+#'
+#' Converts numeric values to exponent-only notation for log-scale axis labels
+#' (e.g., log10(1000) = 3 displays as "1000"). Returns empty string for non-finite values.
+#'
+#' @param z Numeric vector of axis break values
+#'
+#' @return Character vector of formatted labels
+#' @export
+exp_only <- function(z) {
+  ifelse(is.finite(z), sprintf("%g", z), "")
+}
+
+#' Create Faceted Scatter Plot with Correlation Statistics
+#'
+#' Generates a multi-panel scatter plot with linear regression trend lines and
+#' correlation statistics. Facets by disease (rows) and annotation (columns).
+#' Points are rasterized for performance. Uses log10-transformed axes with
+#' exponent-only labels. Displays R-squared and p-values in each panel.
+#'
+#' @param scatter_df Data frame containing CXCR5, CXCR5-RNA, disease, and annotation columns
+#' @param ann_levels Character vector of annotation levels to include and their ordering
+#' @param n_breaks Integer, number of axis breaks per facet (default = 4)
+#' @param base_size Numeric, base font size for theme (default = 12)
+#' @param raster_dpi Numeric, DPI for point rasterization (default = 300)
+#' @param stat_fontsize Numeric, font size in points for statistics text (default = 8)
+#' @param axis_fontsize Numeric, font size for axis labels (default = 10)
+#' @param trend_linewidth Numeric, width of trend line (default = 0.9)
+#'
+#' @return A ggplot object with faceted scatter plots
+#' @export
+make_scatter_plot <- function(scatter_df, ann_levels,
+                              n_breaks = 4,
+                              base_size = 12,
+                              raster_dpi = 300,
+                              stat_fontsize = 8,
+                              axis_fontsize = 10,
+                              trend_linewidth = 0.9) {
+
+  plot_df <- scatter_df %>%
+    filter(annotation %in% ann_levels) %>%
+    mutate(
+      annotation = factor(annotation, levels = ann_levels),
+      disease    = factor(disease)
+    ) %>%
+    filter(!is.na(`CXCR5-RNA`), !is.na(CXCR5), `CXCR5-RNA` > 0, CXCR5 > 0) %>%
+    mutate(
+      x_log10 = log10(`CXCR5-RNA`),
+      y_log10 = log10(CXCR5)
+    )
+
+  stats_df <- plot_df %>%
+    group_by(disease, annotation) %>%
+    summarise(
+      n  = n(),
+      r2 = summary(lm(y_log10 ~ x_log10))$r.squared,
+      p  = suppressWarnings(cor.test(x_log10, y_log10, method = "pearson")$p.value),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      p_txt = case_when(
+        is.na(p)   ~ "p = NA",
+        p < 0.0001 ~ "p < 0.0001",
+        p < 0.001  ~ "p < 0.001",
+        p < 0.01   ~ "p < 0.01",
+        p < 0.05   ~ "p < 0.05",
+        TRUE       ~ paste0("p = ", sprintf("%.4f", p))
+      ),
+      stat_label = paste0(
+        "R\u00B2 = ", sprintf("%.4f", r2), "\n", p_txt
+      ),
+      n_label = paste0("n = ", n)
+    )
+
+  ggplot(plot_df, aes(x = x_log10, y = y_log10)) +
+    ggrastr::geom_point_rast(alpha = 0.25, size = 0.6, raster.dpi = raster_dpi) +
+    facet_grid(disease ~ annotation, scales = "free", drop = FALSE) +
+    geom_smooth(method = "lm", se = FALSE, linewidth = trend_linewidth, fullrange = TRUE) +
+    geom_text(
+      data = stats_df,
+      aes(label = stat_label),
+      x = Inf, y = -Inf,
+      hjust = 1.05, vjust = -0.25,
+      inherit.aes = FALSE,
+      size = stat_fontsize / .pt,
+      colour = "black"
+    ) +
+    geom_text(
+      data = stats_df,
+      aes(label = n_label),
+      x = -Inf, y = Inf,
+      hjust = -0.10,
+      vjust = 1.50,
+      inherit.aes = FALSE,
+      size = stat_fontsize / .pt,
+      colour = "black"
+    ) +
+    facetted_pos_scales(
+      x = list(scale_x_continuous(
+        breaks = pretty_breaks(n = n_breaks),
+        labels = exp_only
+      )),
+      y = list(scale_y_continuous(
+        breaks = pretty_breaks(n = n_breaks),
+        labels = exp_only
+      ))
+    ) +
+    labs(x = "CXCR5-RNA", y = "CXCR5") +
+    theme_minimal(base_size = base_size) +
+    theme(
+      text = element_text(family = "Arial", face = "bold", colour = "black"),
+      axis.title = element_blank(),
+      axis.ticks = element_line(colour = "black", linewidth = 0.4),
+      axis.ticks.length = unit(0.15, "cm"),
+      axis.line = element_line(colour = "black", linewidth = 0.4),
+      panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.4),
+      panel.grid = element_blank(),
+      strip.text.x = element_blank(),
+      strip.text.y = element_blank(),
+      strip.background = element_blank()
+    ) +
+    coord_cartesian(clip = "off")
+}
+
+ann_levels_1 <- c("CD4T", "CD8T", "Treg", "B", "Tumor")
+ann_levels_2 <- c("DC", "M1", "M2", "NK", "Other")
+
+p1 <- make_scatter_plot(df_RNA_protein, ann_levels_1)
+p2 <- make_scatter_plot(df_RNA_protein, ann_levels_2)
+
+ggsave("output/SuppsFig3/FigS8A_1.pdf", plot = p1, device = cairo_pdf,
+       width = 8, height = 4.7, units = "in")
+ggsave("output/SuppsFig3/FigS8A_2.pdf", plot = p2, device = cairo_pdf,
+       width = 8, height = 4.7, units = "in")
+```
+
+
+## Figure S8B
+
+```{r}
+df <- df_normPercentileFeatures_annotated %>%
+  apply_factor_levels(constants)
+
+df_CXCL9 <- df %>%
+  filter(annotation %in% c("DC", "M1", "M2")) %>%
+  select(`CXCL9-RNA`, core, disease, cell_id, cellSize, annotation) %>%
+  pivot_longer(cols = c(1), names_to = "marker", values_to = "expression") %>%
+  group_by(core, disease, marker, annotation) %>%
+  summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop")
+
+ggplot(df_CXCL9, aes(x = interaction(annotation, marker), y = median_expression, fill = disease)) +
+  geom_violin(scale = "width",
+              width = 0.5,
+              trim = TRUE,
+              draw_quantiles = 0.5,
+              position = position_dodge(width = 0.9)) +
+  geom_point(position = position_jitterdodge(
+               jitter.width = 0.15,
+               dodge.width = 0.9
+             ),
+             size = 1.5,
+             alpha = 1) +
+  scale_fill_manual(values = constants$disease_colors) +
+  lims(y = c(0, 1)) +
+  labs(y = "Median Expression", x = "") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank())
+
+ggsave("output/SuppsFig3/FigS8B.pdf", width = 8.5, height = 5, units = "in", dpi = 300)
+```
+
+
+
+
+
+
+
+

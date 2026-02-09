@@ -1,0 +1,1192 @@
+---
+title: "PASTA_Figure1_Quantification"
+author: "Hendrik A. Michel"
+date: "2026-02-08"
+output: 
+    html_document:    
+        toc: true    
+        theme: default
+---
+
+```{r}
+#------------------------------------------------------------------------------
+# System Information
+#------------------------------------------------------------------------------
+# R version: 4.4.2 (2024-10-31)
+# Platform: x86_64-pc-linux-gnu
+# OS: Ubuntu 20.04.3 LTS
+# Locale: en_US.UTF-8
+# Time zone: America/New_York
+#------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------
+# Critical Dependencies
+#------------------------------------------------------------------------------
+# Core packages:
+# - readr (2.1.5)
+# - dplyr (1.1.4)
+# - tidyr (1.3.1)
+# - stringr (1.5.1)
+# - ggplot2 (3.5.2)
+# - RColorBrewer (1.1.3)
+#------------------------------------------------------------------------------
+
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(RColorBrewer)
+sessionInfo()
+```
+
+# Functions
+## Processing helper functions
+```{r}
+# Utility functions
+ai_pt_to_mm <- function(pt) pt * (25.4 / 72) * (96 / 72.27)
+
+plain_labels <- function(x) {
+  # Round to avoid floating point precision issues
+  x_rounded <- round(x, 10)
+  
+  # Check if effectively an integer
+  is_int <- abs(x_rounded - round(x_rounded)) < 1e-10
+  
+  lab <- ifelse(
+    is_int,
+    # Format as integer (no decimals)
+    format(round(x_rounded), scientific = FALSE, big.mark = "", trim = TRUE),
+    # Format as decimal (drop trailing zeros)
+    formatC(x_rounded, format = "f", digits = 10, drop0trailing = TRUE, big.mark = "", decimal.mark = ".")
+  )
+  
+  # Remove trailing decimal points
+  sub("\\.$", "", lab)
+}
+
+replace_zeros_with_min <- function(data, value_col = "Expression", group_cols = NULL) {
+  if (!is.null(group_cols)) {
+    data <- data |> dplyr::group_by(dplyr::across(dplyr::all_of(group_cols)))
+  }
+  
+  data |>
+    dplyr::mutate(
+      .min_pos = suppressWarnings(min(.data[[value_col]][is.finite(.data[[value_col]]) & .data[[value_col]] > 0], na.rm = TRUE)),
+      "{value_col}" := dplyr::if_else(
+        is.finite(.data[[value_col]]) & .data[[value_col]] == 0,
+        dplyr::if_else(is.finite(.min_pos), .min_pos, NA_real_),
+        .data[[value_col]]
+      )
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::select(-.min_pos) |>
+    dplyr::filter(is.finite(.data[[value_col]]), .data[[value_col]] > 0)
+}
+
+ensure_directory <- function(filepath) {
+  dir_path <- dirname(filepath)
+  if (!dir.exists(dir_path)) {
+    dir.create(dir_path, recursive = TRUE, showWarnings = FALSE)
+    message("Created directory: ", dir_path)
+  }
+}
+```
+
+## Horizontal Violin Plot
+```{r}
+#' Generic violin plot with boxplot overlay
+#' 
+#' @param data Preprocessed dataframe with x, y, and fill columns
+#' @param x Name of x-axis column (numeric, will be log10 transformed)
+#' @param y Name of y-axis column (categorical)
+#' @param aes_fill Name of fill aesthetic column
+#' @param fill_values Named vector of colors for fill aesthetic
+#' @param xlim X-axis limits
+#' @param x_breaks X-axis breaks for log10 scale
+#' @param labs_x X-axis label
+#' @param labs_y Y-axis label
+#' @param labs_title Plot title
+#' @param axis Show x-axis text and ticks (default TRUE)
+#' @param axis_angle Angle for x-axis text (default 0)
+#' @param base_size Base font size
+#' @param dodge_width Dodge width for grouping
+#' @param filename Optional filename to save plot
+#' @param width_pt Width in points (for PDF export)
+#' @param height_pt Height in points (for PDF export)
+#' @return ggplot object
+plot_violin_comparison <- function(
+  data,
+  x = "x",
+  y = "y",
+  aes_fill = "condition",
+  fill_values = NULL,
+  xlim = c(0.01, 50000),
+  x_breaks = c(0.01, 0.1, 1, 10, 100, 1000, 10000, 100000),
+  labs_x = NULL,
+  labs_y = NULL,
+  labs_title = NULL,
+  axis = TRUE,
+  axis_angle = 0,
+  base_size = 10,
+  dodge_width = 0.7,
+  filename = NULL,
+  width_pt = 192,
+  height_pt = 71.44
+) {
+  
+  # Default colors if not provided
+  if (is.null(fill_values)) {
+    fill_values <- RColorBrewer::brewer.pal(9, "Set1")[c(4, 3)]
+  }
+  
+  dodge <- ggplot2::position_dodge(width = dodge_width)
+  
+  p <- ggplot2::ggplot(
+    data,
+    ggplot2::aes(
+      x = .data[[x]],
+      y = .data[[y]],
+      fill = .data[[aes_fill]],
+      group = interaction(.data[[y]], .data[[aes_fill]])
+    )
+  ) +
+    ggplot2::geom_violin(
+      position = dodge,
+      adjust = 1.5,
+      scale = "width",
+      trim = TRUE,
+      colour = "black",
+      linewidth = ai_pt_to_mm(0.5)
+    ) +
+    ggplot2::geom_boxplot(
+      position = dodge,
+      width = 0.12,
+      outlier.shape = NA,
+      alpha = 0.5,
+      colour = "black",
+      linewidth = ai_pt_to_mm(0.25)
+    ) +
+    ggplot2::coord_cartesian(xlim = xlim) +
+    ggplot2::scale_x_continuous(
+      trans = "log10",
+      breaks = x_breaks,
+      labels = plain_labels
+    ) +
+    ggplot2::scale_y_discrete(position = "right") +
+    ggplot2::scale_fill_manual(values = fill_values) +
+    ggplot2::labs(x = labs_x, y = labs_y, title = labs_title) +
+    ggplot2::theme_minimal(base_family = "Arial", base_size = base_size) +
+    ggplot2::theme(
+      text = ggplot2::element_text(family = "Arial", face = "bold", colour = "black", size = base_size),
+      axis.title = ggplot2::element_blank(),
+      axis.text.x = if (axis_angle > 0) {
+        ggplot2::element_text(angle = axis_angle, hjust = 1)
+      } else {
+        ggplot2::element_text()
+      },
+      axis.text.y = ggplot2::element_text(),
+      axis.text.y.left = ggplot2::element_blank(),
+      axis.ticks.y.left = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_line(colour = "black", linewidth = ai_pt_to_mm(0.5)),
+      axis.ticks.length = grid::unit(3, "pt"),
+      panel.grid.major.y = ggplot2::element_blank(),
+      panel.grid.minor.y = ggplot2::element_blank(),
+      panel.grid.major.x = ggplot2::element_blank(),
+      panel.grid.minor.x = ggplot2::element_blank(),
+      panel.border = ggplot2::element_rect(colour = "black", fill = NA, linewidth = ai_pt_to_mm(1)),
+      legend.position = "right",  # Changed from "none"
+      plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "pt")
+    )
+  
+  if (!axis) {
+    p <- p + ggplot2::theme(
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank()
+    )
+  }
+  
+  if (!is.null(filename)) {
+    ensure_directory(filename)
+    # Save version without legend
+    p_save <- p + ggplot2::theme(legend.position = "none")
+    ggplot2::ggsave(
+      filename = filename,
+      plot = p_save,  # Save the no-legend version
+      device = grDevices::cairo_pdf,
+      width = width_pt / 72,
+      height = height_pt / 72,
+      units = "in",
+      limitsize = FALSE
+    )
+  }
+  
+  p  # Return the version with legend
+}
+```
+
+## Vertical Violin Plot
+```{r}
+#' Violin plot with vertical orientation (Expression on y-axis)
+#' Handles both grouped comparisons (with dodging) and simple multi-marker plots (no dodging)
+#' 
+#' @param data Preprocessed dataframe with x, y, and fill columns
+#' @param x Name of x-axis column (categorical)
+#' @param y Name of y-axis column (numeric, will be log10 transformed)
+#' @param aes_fill Name of fill aesthetic column
+#' @param fill_values Named vector of colors for fill aesthetic
+#' @param ylim Y-axis limits
+#' @param y_breaks Y-axis breaks for log10 scale
+#' @param labs_x X-axis label
+#' @param labs_y Y-axis label
+#' @param labs_title Plot title
+#' @param show_x_text Show x-axis text (default FALSE)
+#' @param x_text_angle Angle for x-axis text (default 45)
+#' @param base_size Base font size
+#' @param dodge_width Dodge width for grouping (set to 0 for no dodging)
+#' @param filename Optional filename to save plot
+#' @param width_pt Width in points (for PDF export)
+#' @param height_pt Height in points (for PDF export)
+#' @return ggplot object
+plot_violin_vertical <- function(
+  data,
+  x = "x",
+  y = "y",
+  aes_fill = "Signal",
+  fill_values = NULL,
+  ylim = c(0.01, 50000),
+  y_breaks = c(0.01, 0.1, 1, 10, 100, 1000, 10000),
+  labs_x = NULL,
+  labs_y = NULL,
+  labs_title = NULL,
+  show_x_text = FALSE,
+  x_text_angle = 45,
+  base_size = 6,
+  dodge_width = 0.8,
+  filename = NULL,
+  width_pt = 130,
+  height_pt = 135
+) {
+  
+  # Default colors if not provided
+  if (is.null(fill_values)) {
+    fill_values <- c(
+      "Unamp" = "#e25726",
+      "PASTA" = RColorBrewer::brewer.pal(9, "Set1")[2]
+    )
+  }
+  
+  # Set up position (dodge if width > 0, otherwise identity)
+  pos <- if (dodge_width > 0) {
+    ggplot2::position_dodge(width = dodge_width)
+  } else {
+    ggplot2::position_identity()
+  }
+  
+  p <- ggplot2::ggplot(
+    data,
+    ggplot2::aes(
+      x = .data[[x]],
+      y = .data[[y]],
+      fill = .data[[aes_fill]],
+      group = if (dodge_width > 0) interaction(.data[[x]], .data[[aes_fill]]) else .data[[x]]
+    )
+  ) +
+    ggplot2::geom_violin(
+      position = pos,
+      adjust = 1.5,
+      scale = "width",
+      trim = TRUE,
+      colour = "black",
+      linewidth = ai_pt_to_mm(0.5)
+    ) +
+    ggplot2::geom_boxplot(
+      position = pos,
+      width = 0.10,
+      outlier.shape = NA,
+      alpha = 0.5,
+      colour = "black",
+      linewidth = ai_pt_to_mm(0.25)
+      # Removed: fill = NA  <-- This was preventing boxplot from showing in legend
+    ) +
+    ggplot2::coord_cartesian(ylim = ylim) +
+    ggplot2::scale_y_continuous(
+      trans = "log10",
+      breaks = y_breaks,
+      labels = plain_labels
+    ) +
+    ggplot2::scale_fill_manual(values = fill_values) +
+    ggplot2::labs(x = labs_x, y = labs_y, title = labs_title) +
+    ggplot2::theme_minimal(base_family = "Arial", base_size = base_size) +
+    ggplot2::theme(
+      text = ggplot2::element_text(family = "Arial", face = "bold", colour = "black", size = base_size),
+      axis.title = ggplot2::element_blank(),
+      axis.text.x = if (show_x_text) {
+        ggplot2::element_text(angle = x_text_angle, hjust = 1, colour = "black")
+      } else {
+        ggplot2::element_blank()
+      },
+      axis.text.y = ggplot2::element_text(colour = "black"),
+      axis.ticks.x = ggplot2::element_blank(),
+      axis.ticks.y = ggplot2::element_line(colour = "black", linewidth = ai_pt_to_mm(0.5)),
+      axis.ticks.length = grid::unit(3, "pt"),
+      panel.grid.major.y = ggplot2::element_blank(),
+      panel.grid.minor.y = ggplot2::element_blank(),
+      panel.grid.major.x = ggplot2::element_blank(),
+      panel.grid.minor.x = ggplot2::element_blank(),
+      panel.border = ggplot2::element_rect(colour = "black", fill = NA, linewidth = ai_pt_to_mm(1)),
+      legend.position = "right",
+      plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "pt")
+    )
+  
+  if (!is.null(filename)) {
+    ensure_directory(filename)
+    # Save version without legend
+    p_save <- p + ggplot2::theme(legend.position = "none")
+    ggplot2::ggsave(
+      filename = filename,
+      plot = p_save,
+      device = grDevices::cairo_pdf,
+      width = width_pt / 72,
+      height = height_pt / 72,
+      units = "in",
+      limitsize = FALSE
+    )
+  }
+  
+  p  # Return the version with legend
+}
+```
+
+## Vertical Violin Plot with condition grouping
+```{r}
+#' Violin plot comparing markers across conditions
+#' Conditions on x-axis, Expression on y-axis, grouped by Marker
+#' 
+#' @param data Preprocessed dataframe with x, y, and fill columns
+#' @param x Name of x-axis column (categorical - conditions)
+#' @param y Name of y-axis column (numeric, will be log10 transformed)
+#' @param aes_fill Name of fill aesthetic column (markers)
+#' @param fill_values Named vector of colors for fill aesthetic
+#' @param ylim Y-axis limits
+#' @param y_breaks Y-axis breaks for log10 scale (major)
+#' @param y_minor_breaks Y-axis minor breaks for log10 scale
+#' @param labs_y Y-axis label
+#' @param labs_title Plot title
+#' @param show_x_text Show x-axis text (default FALSE)
+#' @param base_size Base font size
+#' @param dodge_width Dodge width for grouping
+#' @param filename Optional filename to save plot
+#' @param width_pt Width in points (for PDF export)
+#' @param height_pt Height in points (for PDF export)
+#' @return ggplot object
+plot_violin_by_condition <- function(
+  data,
+  x = "x",
+  y = "y",
+  aes_fill = "Marker",
+  fill_values = NULL,
+  ylim = c(1, 60000),
+  y_breaks = c(0.0001, 0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000, 100000, 1000000),
+  y_minor_breaks = NULL,  # Not needed without gridlines
+  labs_y = "Median Expression",
+  labs_title = NULL,
+  show_x_text = FALSE,
+  base_size = 7.5,
+  dodge_width = 1,
+  filename = NULL,
+  width_pt = 124,
+  height_pt = 71
+) {
+  
+  # Default colors if not provided
+  if (is.null(fill_values)) {
+    fill_values <- RColorBrewer::brewer.pal(9, "Set1")[c(5, 2)]
+  }
+  
+  p <- ggplot2::ggplot(
+    data,
+    ggplot2::aes(
+      x = .data[[x]],
+      y = .data[[y]],
+      fill = .data[[aes_fill]]
+    )
+  ) +
+    ggplot2::geom_violin(
+      position = ggplot2::position_dodge(dodge_width),
+      adjust = 1.5,
+      scale = "width",
+      trim = FALSE,
+      colour = "black",
+      linewidth = ai_pt_to_mm(0.5)
+    ) +
+    ggplot2::geom_boxplot(
+      position = ggplot2::position_dodge(dodge_width),
+      width = 0.15,
+      outlier.shape = NA,
+      alpha = 0.5,
+      colour = "black",
+      linewidth = ai_pt_to_mm(0.5)
+    ) +
+    ggplot2::coord_cartesian(ylim = ylim) +
+    ggplot2::scale_y_continuous(
+      trans = "log10",
+      breaks = y_breaks,
+      labels = plain_labels  # Added labels like other functions
+    ) +
+    ggplot2::scale_fill_manual(values = fill_values) +
+    ggplot2::scale_color_manual(values = fill_values) +
+    ggplot2::labs(y = labs_y, title = labs_title) +
+    ggplot2::theme_minimal(base_family = "Arial", base_size = base_size) +
+    ggplot2::theme(
+      text = ggplot2::element_text(family = "Arial", face = "bold", colour = "black", size = base_size),
+      axis.title.y = ggplot2::element_text(
+        size = 8,
+        margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "pt")
+      ),
+      axis.title.x = ggplot2::element_blank(),
+      axis.text.x = if (show_x_text) {
+        ggplot2::element_text(colour = "black")
+      } else {
+        ggplot2::element_blank()
+      },
+      axis.text.y = ggplot2::element_text(colour = "black"),  # Added for consistency
+      axis.ticks.x = ggplot2::element_blank(),
+      axis.ticks.y = ggplot2::element_line(colour = "black", linewidth = ai_pt_to_mm(0.5)),  # Added y-axis ticks
+      axis.ticks.length = grid::unit(3, "pt"),
+      panel.grid.major.x = ggplot2::element_blank(),
+      panel.grid.minor.x = ggplot2::element_blank(),
+      panel.grid.major.y = ggplot2::element_blank(),  # Changed from element_line
+      panel.grid.minor.y = ggplot2::element_blank(),  # Changed from element_line
+      panel.border = ggplot2::element_rect(colour = "black", fill = NA, linewidth = ai_pt_to_mm(1)),
+      legend.position = "right",
+      plot.margin = ggplot2::margin(t = 0, r = 0, b = 0, l = 0, unit = "pt")
+    )
+  
+  if (!is.null(filename)) {
+    ensure_directory(filename)
+    # Save version without legend
+    p_save <- p + ggplot2::theme(legend.position = "none")
+    ggplot2::ggsave(
+      filename = filename,
+      plot = p_save,
+      device = grDevices::cairo_pdf,
+      width = width_pt / 72,
+      height = height_pt / 72,
+      units = "in",
+      limitsize = FALSE
+    )
+  }
+  
+  p  # Return the version with legend
+}
+```
+
+
+# Figure 1B + 1C
+## Load data frame
+```{r}
+
+df_fig1bc_f <- "data/Fig1BC_S1AB/05_Fig1BC_S1AB_Stripped_CombinedFeatures.csv"
+
+df_fig1bc <- read_csv(df_fig1bc_f)
+
+```
+
+## Preprocess data frames
+```{r}
+# CD3
+df_cd3 <- df_fig1bc %>%
+  dplyr::select(source, CD3con250ms, CD3con250msBL, CD3tsaA250ms, CD3tsaA250msBL) %>%
+  tidyr::pivot_longer(
+    cols = c(CD3con250ms, CD3con250msBL, CD3tsaA250ms, CD3tsaA250msBL),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::mutate(
+    condition = dplyr::if_else(stringr::str_detect(Marker, "BL"), "Blank", "Signal"),
+    assay = dplyr::if_else(stringr::str_detect(Marker, "con"), "Unamplified", "PASTA"),
+    source_display = dplyr::case_when(
+      source == "Top" ~ "10µM",
+      source == "Middle" ~ "5µM",
+      source == "Bottom" ~ "2.5µM"
+    ),
+    source_display = dplyr::if_else(assay == "Unamplified", "Unamplified", source_display)
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = c("Marker", "condition")
+  ) %>%
+  dplyr::mutate(
+    x = Expression,
+    y = source_display,
+    y = factor(y, levels = c("10µM", "5µM", "2.5µM", "Unamplified")),
+    condition = factor(condition, levels = c("Signal", "Blank"))
+  )
+
+# IBA1
+df_iba1 <- df_fig1bc %>%
+  dplyr::select(source, IBA1con250ms, IBA1conBL250ms, IBA1tsa250ms, IBA1tsaBL250ms) %>%
+  tidyr::pivot_longer(
+    cols = c(IBA1con250ms, IBA1conBL250ms, IBA1tsa250ms, IBA1tsaBL250ms),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::mutate(
+    condition = dplyr::if_else(stringr::str_detect(Marker, "BL"), "Blank", "Signal"),
+    assay = dplyr::if_else(stringr::str_detect(Marker, "con"), "Unamplified", "PASTA"),
+    source_display = dplyr::case_when(
+      source == "Top" ~ "2.5µM",
+      source == "Middle" ~ "5µM",
+      source == "Bottom" ~ "10µM"
+    ),
+    source_display = dplyr::if_else(assay == "Unamplified", "Unamplified", source_display)
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = c("Marker", "condition")
+  ) %>%
+  dplyr::mutate(
+    x = Expression,
+    y = source_display,
+    y = factor(y, levels = c("10µM", "5µM", "2.5µM", "Unamplified")),
+    condition = factor(condition, levels = c("Signal", "Blank"))
+  )
+
+# Fig1C
+df_fig1c <- df_fig1bc %>%
+  dplyr::select(source, cellLabel, 
+                FASLcon50ms, FASLtsa50ms,
+                cd45RAcon50ms, CD45RAtsa50ms,
+                PDL1con250ms, PDL1tsa250ms,
+                CD20con250ms, CD20tsa250ms,
+                CD11ccon250ms, CD11ctsaA250ms) %>%
+  tidyr::pivot_longer(
+    cols = c(FASLcon50ms, FASLtsa50ms, cd45RAcon50ms, CD45RAtsa50ms,
+             PDL1con250ms, PDL1tsa250ms, CD20con250ms, CD20tsa250ms,
+             CD11ccon250ms, CD11ctsaA250ms),
+    names_to = "RawMarker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::mutate(
+    method = dplyr::case_when(
+      stringr::str_detect(RawMarker, "tsa") ~ "PASTA",
+      stringr::str_detect(RawMarker, "con") ~ "Unamplified",
+      TRUE ~ NA_character_
+    ),
+    marker = dplyr::case_when(
+      stringr::str_detect(RawMarker, "FASL") ~ "Fas Ligand",
+      stringr::str_detect(RawMarker, "45RA") ~ "CD45RA",
+      stringr::str_detect(RawMarker, "PDL1") ~ "PD-L1",
+      stringr::str_detect(RawMarker, "CD20") ~ "CD20",
+      stringr::str_detect(RawMarker, "CD11c") ~ "CD11c",
+      TRUE ~ NA_character_
+    ),
+    combination = stringr::str_c(source, marker, sep = " - ")
+  ) %>%
+  dplyr::filter(
+    !is.na(method), !is.na(marker),
+    combination %in% c(
+      "Top - PD-L1", "Top - Fas Ligand", "Top - CD20", "Top - CD45RA",
+      "Bottom - CD11c"
+    )
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = "RawMarker"
+  ) %>%
+  dplyr::mutate(
+    x = Expression,
+    y = marker,
+    y = factor(y, levels = c("CD11c", "CD20", "PD-L1", "CD45RA", "Fas Ligand")),
+    method = factor(method, levels = c("PASTA", "Unamplified"))
+  )
+
+```
+
+## Plots
+
+```{r}
+## Fig. 1B CD3
+fig_cd3 <- plot_violin_comparison(
+  df_cd3,
+  aes_fill = "condition",
+  fill_values = c("Signal" = "#4DAF4A", "Blank" = "#984EA3"),
+  xlim = c(100, 50000),
+  labs_title = "Figure 1B - CD3",
+  axis = TRUE,
+  filename = "output/Fig1/Fig1B_CD3.pdf",
+  width_pt = 192,
+  height_pt = 71.44
+)
+fig_cd3
+```
+
+```{r}
+## Fig. 1B IBA1
+fig_iba1 <- plot_violin_comparison(
+  df_iba1,
+  aes_fill = "condition",
+  fill_values = c("Signal" = "#4DAF4A", "Blank" = "#984EA3"),
+  xlim = c(100, 50000),
+  labs_title = "Figure 1B - IBA1",
+  axis = TRUE,
+  filename = "output/Fig1/Fig1B_IBA1.pdf",
+  width_pt = 192,
+  height_pt = 71.44
+)
+fig_iba1
+```
+
+```{r}
+## Fig. 1C
+fig_1c <- plot_violin_comparison(
+  df_fig1c,
+  aes_fill = "method",
+  fill_values = c("Unamplified" = "#e25726", "PASTA" = "#377EB8"),
+  xlim = c(50, NA),
+  labs_title = "Figure 1C",
+  axis = TRUE,
+  axis_angle = 45,
+  base_size = 6,
+  dodge_width = 0.8,
+  filename = "output/Fig1/Fig1C.pdf",
+  width_pt = 190,
+  height_pt = 160
+)
+fig_1c
+```
+
+# Figure 1D
+## Load data frame
+```{r}
+df_fig1d_f <- "data/Fig1D_S2/03_Fig1D_S2_RawFeaturesCellData.csv"
+
+df_fig1d <- read_csv(df_fig1d_f)
+```
+
+## Process data frame
+```{r}
+# Prepare data
+df_fig1d_plot <- df_fig1d %>%
+  dplyr::filter(condition == "NegCtrlFig1RedoSlide") %>% ## This is the same as the "Complete Panel" slide
+  dplyr::select(cellLabel, CD3con, CD3Tyr, CD11ccon, CD11cTyr, CD20con, CD20Tyr, 
+                PD1con_02, PD1Tyr_02, CD8con, CD8Tyr, CD4con, CD4Tyr, 
+                Iba1con_02, Iba1Tyr_02, CD163con, CD163Tyr, FoxP3con, FoxP3Tyr, 
+                CD57con_02, CD57Tyr_02) %>%
+  tidyr::pivot_longer(
+    cols = -cellLabel,
+    names_to = "RawMarkers",
+    values_to = "Expression"
+  ) %>%
+  dplyr::mutate(
+    Signal = dplyr::case_when(
+      stringr::str_detect(RawMarkers, "con") ~ "Unamp",
+      stringr::str_detect(RawMarkers, "Tyr") ~ "PASTA",
+      TRUE ~ NA_character_
+    ),
+    Marker = dplyr::case_when(
+      stringr::str_detect(RawMarkers, "CD3") ~ "CD3",
+      stringr::str_detect(RawMarkers, "CD11c") ~ "CD11c",
+      stringr::str_detect(RawMarkers, "CD20") ~ "CD20",
+      stringr::str_detect(RawMarkers, "PD1") ~ "PD-1",
+      stringr::str_detect(RawMarkers, "CD8") ~ "CD8",
+      stringr::str_detect(RawMarkers, "CD4") ~ "CD4",
+      stringr::str_detect(RawMarkers, "Iba1") ~ "Iba1",
+      stringr::str_detect(RawMarkers, "CD163") ~ "CD163",
+      stringr::str_detect(RawMarkers, "FoxP3") ~ "FoxP3",
+      stringr::str_detect(RawMarkers, "CD57") ~ "CD57",
+      stringr::str_detect(RawMarkers, "ICOS") ~ "ICOS",
+      stringr::str_detect(RawMarkers, "Pax5") ~ "Pax5"      
+    )
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = "RawMarkers"
+  ) %>%
+  dplyr::mutate(
+    x = Expression,
+    y = factor(Marker, levels = c("Iba1", "CD57", "FoxP3", "CD8", "CD4", "CD163", "PD-1", "CD20", "CD11c", "CD3")),
+    Signal = factor(Signal, levels = c("PASTA", "Unamp"))
+  )
+```
+
+## Plot data frame
+```{r}
+# Plot
+fig_1d <- plot_violin_comparison(
+  df_fig1d_plot,
+  aes_fill = "Signal",
+  fill_values = c(
+    "Unamp" = "#e25726",
+    "PASTA" = RColorBrewer::brewer.pal(9, "Set1")[2]
+  ),
+  xlim = c(0.01, 70000),
+  x_breaks = c(0.01, 0.1, 1, 10, 100, 1000, 10000),
+  labs_title = "Figure 1D",
+  axis = TRUE,
+  axis_angle = 45,
+  base_size = 6,
+  dodge_width = 0.8,
+  filename = "output/Fig1/Fig1D.pdf",
+  width_pt = 190,
+  height_pt = 190
+)
+fig_1d
+```
+
+
+# Figure S1B
+## Load data frames
+```{r}
+
+df_stripped_f <- "data/Fig1BC_S1AB/05_Fig1BC_S1AB_Stripped_CombinedFeatures.csv"
+df_NOTstripped_f <- "data/Fig1BC_S1AB/05_Fig1BC_S1AB_NotStripped_CombinedFeatures.csv"
+
+
+df_stripped <- read_csv(df_stripped_f)
+df_NOTstripped <- read_csv(df_NOTstripped_f)
+
+```
+
+## Process data frames and combine
+```{r}
+
+# Prepare data
+df_cd11c_stripping <- df_NOTstripped %>%
+  dplyr::filter(source == "Bottom") %>%
+  dplyr::mutate(strip_status = "Not Stripped") %>%
+  dplyr::select(strip_status, 
+                Oligo1 = CD11ctsaA250ms,
+                Oligo2 = CD11ctsaB250ms,
+                Unamplified = CD11ccon250ms,
+                Blank = CD11ccon250msBL) %>%
+  dplyr::bind_rows(
+    df_stripped %>%
+      dplyr::filter(source == "Bottom") %>%
+      dplyr::mutate(strip_status = "Stripped") %>%
+      dplyr::select(strip_status,
+                    Oligo1 = CD11ctsaA250ms,
+                    Oligo2 = CD11ctsaB250ms,
+                    Unamplified = CD11ccon250ms,
+                    Blank = CD11ccon250msBL)
+  ) %>%
+  tidyr::pivot_longer(
+    cols = c(Oligo1, Oligo2, Unamplified, Blank),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = c("Marker", "strip_status")
+  ) %>%
+  dplyr::mutate(
+    x = Expression,
+    y = factor(Marker, levels = c("Oligo2", "Oligo1", "Blank", "Unamplified")),
+    strip_status = factor(strip_status, levels = c("Stripped", "Not Stripped"))
+  )
+
+```
+
+## Plot
+```{r}
+# Plot
+fig_cd11c_stripping <- plot_violin_comparison(
+  df_cd11c_stripping,
+  aes_fill = "strip_status",
+  fill_values = c(
+    "Not Stripped" = RColorBrewer::brewer.pal(9, "Set1")[1],
+    "Stripped" = RColorBrewer::brewer.pal(9, "Set1")[2]
+  ),
+  xlim = c(100, NA),
+  labs_title = "Supp Figure 1B - CD11c Stripping",
+  axis = TRUE,
+  axis_angle = 45,
+  base_size = 10,
+  dodge_width = 0.95,
+  filename = "output/SuppsFig1/FigS1B_CD11c_Stripping.pdf",
+  width_pt = 230,
+  height_pt = 180
+)
+fig_cd11c_stripping
+```
+
+# Figure S1C
+## Load dataframe
+```{r}
+df_figs1c_f <- "data/FigS1C/02_FigS1C_RepDep_High_SCFeatures_ScaleSize.csv"
+
+df_figs1c <- read_csv(df_figs1c_f)
+```
+
+## Prepare data for plotting
+```{r}
+# CD3 Markers
+df_cd3_markers <- df_figs1c %>%
+  dplyr::select(CD3con, CD3Tyr1, CD3Tyr2, CD3Tyr3, CD3Tyr4) %>%
+  tidyr::pivot_longer(
+    cols = dplyr::everything(),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = "Marker"
+  ) %>%
+  dplyr::mutate(
+    x = factor(Marker, levels = c("CD3con", "CD3Tyr1", "CD3Tyr2", "CD3Tyr3", "CD3Tyr4")),
+    y = Expression
+  )
+
+# CD8 Markers
+df_cd8_markers <- df_figs1c %>%
+  dplyr::select(CD8con, CD8Tyr1, CD8Tyr2, CD8Tyr3, CD8Tyr4) %>%
+  tidyr::pivot_longer(
+    cols = dplyr::everything(),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = "Marker"
+  ) %>%
+  dplyr::mutate(
+    x = factor(Marker, levels = c("CD8con", "CD8Tyr1", "CD8Tyr2", "CD8Tyr3", "CD8Tyr4")),
+    y = Expression
+  )
+
+```
+
+## Plot
+```{r}
+fig_cd3_markers <- plot_violin_vertical(
+  df_cd3_markers,
+  aes_fill = "Marker",  # Color by marker
+  fill_values = c(
+    CD3con = "#e15826",
+    CD3Tyr1 = RColorBrewer::brewer.pal(9, "GnBu")[2],
+    CD3Tyr2 = RColorBrewer::brewer.pal(9, "GnBu")[4],
+    CD3Tyr3 = RColorBrewer::brewer.pal(9, "GnBu")[6],
+    CD3Tyr4 = RColorBrewer::brewer.pal(9, "GnBu")[8]
+  ),
+  ylim = c(0.05, 50000),
+  y_breaks = c(0.1, 1, 10, 100, 1000, 10000),
+  show_x_text = TRUE,  # Show marker names on x-axis
+  base_size = 6,
+  dodge_width = 0,  # No dodging needed
+  filename = "output/SuppsFig1/FigS1C_CD3.pdf",
+  width_pt = 130,
+  height_pt = 90
+)
+fig_cd3_markers
+
+fig_cd8_markers <- plot_violin_vertical(
+  df_cd8_markers,
+  aes_fill = "Marker",
+  fill_values = c(
+    CD8con = "#e15826",
+    CD8Tyr1 = RColorBrewer::brewer.pal(9, "GnBu")[2],
+    CD8Tyr2 = RColorBrewer::brewer.pal(9, "GnBu")[4],
+    CD8Tyr3 = RColorBrewer::brewer.pal(9, "GnBu")[6],
+    CD8Tyr4 = RColorBrewer::brewer.pal(9, "GnBu")[8]
+  ),
+  ylim = c(0.1, 65000),
+  y_breaks = c(0.1, 1, 10, 100, 1000, 10000),
+  show_x_text = TRUE,
+  base_size = 6,
+  dodge_width = 0,
+  filename = "output/SuppsFig1/FigS1C_CD8.pdf",
+  width_pt = 130,
+  height_pt = 90
+)
+fig_cd8_markers
+```
+
+
+# Figure S2
+## Load dataframes
+```{r}
+df_figs2_f <- "data/Fig1D_S2/03_Fig1D_S2_RawFeaturesCellData.csv"
+
+df_figs2 <- read_csv(df_figs2_f)
+```
+
+## Prepare data for plotting
+```{r}
+# Prepare data
+df_negctrl <- df_figs2 %>%
+  dplyr::select(cellLabel, condition, 
+                CD4con_02, CD4Tyr_02, PD1con_02, PD1Tyr_02, 
+                CD3con, CD3Tyr, CD8con, CD8Tyr, 
+                FoxP3con, FoxP3Tyr, Iba1con_02, Iba1Tyr_02, 
+                Pax5con_02, Pax5Tyr_02, CD11ccon, CD11cTyr, 
+                CD163con, CD163Tyr, CD20con, CD20Tyr, 
+                ICOScon_02, ICOSTyr_02, CD57con_02, CD57Tyr_02) %>%
+  tidyr::pivot_longer(
+    cols = -c(cellLabel, condition),
+    names_to = "RawMarker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::mutate(
+    Marker = stringr::str_extract(RawMarker, ".*?(?=con|Tyr)"),
+    Signal = dplyr::case_when(
+      stringr::str_detect(RawMarker, "con") ~ "Unamp",
+      stringr::str_detect(RawMarker, "Tyr") ~ "PASTA",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = c("condition", "RawMarker")
+  )
+
+# Set colors
+selected_colors <- c(
+  Unamp = "#e25726",
+  PASTA = RColorBrewer::brewer.pal(9, "Set1")[2]
+)
+
+# Define levels
+condition_levels <- c("NegCtrlFig1RedoSlide", "NegCtrlRepDepSlide")
+signal_levels <- c("Unamp", "PASTA")
+
+# Set 1: CD4, PD1, CD3
+marker_levels_set1 <- c("CD4", "PD1", "CD3")
+markercond_levels_set1 <- unlist(lapply(marker_levels_set1, function(m) paste(m, condition_levels, sep = "\n")))
+
+df_set1 <- df_negctrl %>%
+  dplyr::filter(Marker %in% marker_levels_set1) %>%
+  dplyr::mutate(
+    Marker = factor(Marker, levels = marker_levels_set1),
+    Signal = factor(Signal, levels = signal_levels),
+    condition = factor(condition, levels = condition_levels),
+    MarkerCond = interaction(Marker, condition, sep = "\n", lex.order = TRUE),
+    MarkerCond = factor(MarkerCond, levels = markercond_levels_set1),
+    x = MarkerCond,
+    y = Expression
+  )
+
+# Set 2: CD8, FoxP3, Iba1
+marker_levels_set2 <- c("CD8", "FoxP3", "Iba1")
+markercond_levels_set2 <- unlist(lapply(marker_levels_set2, function(m) paste(m, condition_levels, sep = "\n")))
+
+df_set2 <- df_negctrl %>%
+  dplyr::filter(Marker %in% marker_levels_set2) %>%
+  dplyr::mutate(
+    Marker = factor(Marker, levels = marker_levels_set2),
+    Signal = factor(Signal, levels = signal_levels),
+    condition = factor(condition, levels = condition_levels),
+    MarkerCond = interaction(Marker, condition, sep = "\n", lex.order = TRUE),
+    MarkerCond = factor(MarkerCond, levels = markercond_levels_set2),
+    x = MarkerCond,
+    y = Expression
+  )
+
+# Set 3: Pax5, CD11c, CD163
+marker_levels_set3 <- c("Pax5", "CD11c", "CD163")
+markercond_levels_set3 <- unlist(lapply(marker_levels_set3, function(m) paste(m, condition_levels, sep = "\n")))
+
+df_set3 <- df_negctrl %>%
+  dplyr::filter(Marker %in% marker_levels_set3) %>%
+  dplyr::mutate(
+    Marker = factor(Marker, levels = marker_levels_set3),
+    Signal = factor(Signal, levels = signal_levels),
+    condition = factor(condition, levels = condition_levels),
+    MarkerCond = interaction(Marker, condition, sep = "\n", lex.order = TRUE),
+    MarkerCond = factor(MarkerCond, levels = markercond_levels_set3),
+    x = MarkerCond,
+    y = Expression
+  )
+
+# Set 4: CD20, ICOS, CD57
+marker_levels_set4 <- c("CD20", "ICOS", "CD57")
+markercond_levels_set4 <- unlist(lapply(marker_levels_set4, function(m) paste(m, condition_levels, sep = "\n")))
+
+df_set4 <- df_negctrl %>%
+  dplyr::filter(Marker %in% marker_levels_set4) %>%
+  dplyr::mutate(
+    Marker = factor(Marker, levels = marker_levels_set4),
+    Signal = factor(Signal, levels = signal_levels),
+    condition = factor(condition, levels = condition_levels),
+    MarkerCond = interaction(Marker, condition, sep = "\n", lex.order = TRUE),
+    MarkerCond = factor(MarkerCond, levels = markercond_levels_set4),
+    x = MarkerCond,
+    y = Expression
+  )
+
+
+```
+
+## Plot data
+```{r}
+
+fig_set1 <- plot_violin_vertical(
+  df_set1,
+  aes_fill = "Signal",
+  fill_values = selected_colors,
+  ylim = c(0.01, 50000),
+  filename = "output/SuppsFig1/FigS2_NegCtrl_Set1.pdf",
+  show_x_text = TRUE,
+  width_pt = 130,
+  height_pt = 135
+)
+fig_set1
+
+fig_set2 <- plot_violin_vertical(
+  df_set2,
+  aes_fill = "Signal",
+  fill_values = selected_colors,
+  ylim = c(0.01, 50000),
+  filename = "output/SuppsFig1/FigS2_NegCtrl_Set2.pdf",
+  show_x_text = TRUE,
+  width_pt = 130,
+  height_pt = 135
+)
+fig_set2
+
+fig_set3 <- plot_violin_vertical(
+  df_set3,
+  aes_fill = "Signal",
+  fill_values = selected_colors,
+  ylim = c(0.01, 50000),
+  filename = "output/SuppsFig1/FigS2_NegCtrl_Set3.pdf",
+  show_x_text = TRUE,
+  width_pt = 130,
+  height_pt = 135
+)
+fig_set3
+
+fig_set4 <- plot_violin_vertical(
+  df_set4,
+  aes_fill = "Signal",
+  fill_values = selected_colors,
+  ylim = c(0.01, 50000),
+  filename = "output/SuppsFig1/FigS2_NegCtrl_Set4.pdf",
+  show_x_text = TRUE,
+  width_pt = 130,
+  height_pt = 135
+)
+fig_set4
+```
+
+# Figure S3A
+## Load data frame
+```{r}
+df_figs3a_f <- "data/FigS3A/03_FigS3A_median_combined.csv"
+
+df_figs3a <- read_csv(df_figs3a_f)
+
+```
+
+## Process data
+```{r}
+df_figs3a$condition <- factor(df_figs3a$condition,
+                              levels = c("thin", "medium", "thick"))
+
+df_cd3_condition <- df_figs3a %>%
+  tidyr::pivot_longer(
+    cols = -c(region_id, condition),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::filter(Marker %in% c("CD3con_250ms", "CD3Tyr_250ms")) %>%
+  dplyr::mutate(
+    x = condition,
+    y = Expression
+  )
+
+df_cd8_condition <- df_figs3a %>%
+  tidyr::pivot_longer(
+    cols = -c(region_id, condition),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::filter(Marker %in% c("CD8con_250ms", "CD8Tyr_250ms")) %>%
+  dplyr::mutate(
+    x = condition,
+    y = Expression
+  )
+
+df_cd11c_condition <- df_figs3a %>%
+  tidyr::pivot_longer(
+    cols = -c(region_id, condition),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::filter(Marker %in% c("CD11ccon_250ms", "CD11cTyr_250ms")) %>%
+  dplyr::mutate(
+    x = condition,
+    y = Expression
+  )
+
+df_cd69_condition <- df_figs3a %>%
+  tidyr::pivot_longer(
+    cols = -c(region_id, condition),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  dplyr::filter(Marker %in% c("CD69_250ms")) %>%
+  dplyr::mutate(
+    x = condition,
+    y = Expression
+  )
+
+```
+
+## Plot
+```{r}
+fig_cd3_exp <- plot_violin_by_condition(
+  df_cd3_condition,
+  aes_fill = "Marker",
+  fill_values = RColorBrewer::brewer.pal(9, "Set1")[c(5, 2)],
+  ylim = c(300, 50000),
+  filename = "output/SuppsFig1/FigS3A_CD3.pdf",
+  show_x_text = TRUE,
+  width_pt = 124,
+  height_pt = 71
+)
+fig_cd3_exp
+
+fig_cd8_exp <- plot_violin_by_condition(
+  df_cd8_condition,
+  aes_fill = "Marker",
+  fill_values = RColorBrewer::brewer.pal(9, "Set1")[c(5, 2)],
+  ylim = c(200, 30000),
+  filename = "output/SuppsFig1/FigS3A_CD8.pdf",
+  show_x_text = TRUE,
+  width_pt = 124,
+  height_pt = 71
+)
+fig_cd8_exp
+
+fig_cd11c_exp <- plot_violin_by_condition(
+  df_cd11c_condition,
+  aes_fill = "Marker",
+  fill_values = RColorBrewer::brewer.pal(9, "Set1")[c(5, 2)],
+  ylim = c(1000, 30000),
+  filename = "output/SuppsFig1/FigS3A_CD11c.pdf",
+  show_x_text = TRUE,
+  width_pt = 124,
+  height_pt = 71
+)
+fig_cd11c_exp
+
+fig_cd69_exp <- plot_violin_by_condition(
+  df_cd69_condition,
+  aes_fill = "Marker",
+  fill_values = RColorBrewer::brewer.pal(9, "Set1")[2],
+  ylim = c(10000, 30000),
+  y_breaks = c(10000, 30000),
+  filename = "output/SuppsFig1/FigS3A_CD69.pdf",
+  show_x_text = TRUE,
+  width_pt = 124,
+  height_pt = 71
+)
+fig_cd69_exp
+
+```
+
+
+
+
+
