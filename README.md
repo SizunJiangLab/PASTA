@@ -35,7 +35,7 @@ The code is designed to work with the data available on [Zenodo](https://doi.org
 
 ## Script for OT-2 automation
 
-We are providing interested users with templates of the python scripts for PASTA automation on the OT-2 liquid handling platform.
+We are providing interested users with templates of the python scripts for PASTA automation on the OT-2 liquid handling platform. A thorough documentation can be found [here](automation/)
 
 
 | File Name                              | Description                                             |

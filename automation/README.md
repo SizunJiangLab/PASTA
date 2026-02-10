@@ -149,7 +149,7 @@ The 96-well plate in slot 2 is placed on top of the Opentrons OT-2 temperature m
 
 The script expects the above reagents in each well of the 12-well reservoir plates. For reagents with multiple wells per reagents (CODEX buffer or stripping buffer), the script expects the indicated volume in the indicated number of wells, filled left-to-right.
 
-We recommend the 12-well 15ml reservoirs by XXX sealed with adhesive foil by XXX.
+We recommend the 12-well 15ml reservoirs by Stellar Scientific (cat# CT229562) sealed with adhesive foil (cat# AB0626, ThermoFisher.
 
 
 ### 96-well plate layout
@@ -162,7 +162,7 @@ The script expects the following reagents in each group of 3 wells per cycle per
 - Tyramide oligo on its own diluted relative to 200 µl (e.g. 4 µl if doing a 1:50 dilution)
 - 200 µl TSA Buffer
 
-We recommend the 96-well plate by XXX sealed with adhesive foil by XXX.
+We recommend the 96-well plate by Sigma (cat# BR781607-100EA) sealed with adhesive foil (cat# AB0626, ThermoFisher.
 
 
 ### OmniStainer
