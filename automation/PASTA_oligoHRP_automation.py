@@ -3,9 +3,9 @@ import json
 import math
 
 metadata = {
-    'protocolName': '2samples_16cycles',
+    'protocolName': 'Template PASTA oligo-HRP',
     'author': 'Hendrik A. Michel',
-    'description': 'Protocol for automated PASTA oligo-HRP application for up to 2 samples and up to 16 cycles.',
+    'description': 'Protocol for automated PASTA oligo-HRP application.',
     'apiLevel': '2.7'
 }
 
@@ -659,7 +659,7 @@ def run(protocol: protocol_api.ProtocolContext):
         for sample in range(len(sample_chambers)):
             Tyr_well = (sample * sample_spacing) + cycle_jump + 1
             Diluent_well = (sample * sample_spacing) + cycle_jump + 2
-            sample_well_name = sample_chambers[sample].name  # Get 'A2', 'A3', etc.
+            sample_well_name = wellslist[sample]  # Get 'A2', 'A3', etc.
             dilution_factor = Tyr_dilution_lib[cycle + 1][sample_well_name]  # +1 for cycle number
             Tyr_diluent_volume = 200 - (200 / dilution_factor)
             dilute_and_apply_TSA(pipette_300, current_row[Tyr_well], current_row[Diluent_well], sample_chambers[sample], Tyr_diluent_volume, 90, keep_tip=False, apply=False)
