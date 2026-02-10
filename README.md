@@ -17,8 +17,9 @@ The PASTA code and data are released to the academic community for non-commercia
 
 
 
-## Script for figures
+## Figures
 
+### Scripts for Figures
 An overview of the purpose of different scripts to reproduce the figures in the manuscript.
 
 
@@ -28,6 +29,31 @@ An overview of the purpose of different scripts to reproduce the figures in the 
 | `paper_figures/PASTA_Fig3_Quantification.Rmd`                 | Code for plots in Figure 3 and corresponding Supplemental Figures S5-8    |
 | `paper_figures/PASTA_Fig3_PhenotypeMaps.ipynb`                | Code for phenotype maps in Figure 3C and corresponding Supplemental Figures S6 and S8C |
 
-## Data Availability
+### Data Availability
 
 The code is designed to work with the data available on [Zenodo](https://doi.org/10.5281/zenodo.18525925). The "data" folder in Fig1_data.zip contains all necessary data to generate the quantification plots in Fig. 1 and S1-3 using the above code. The "data" folder in Fig3_data.zip contains all necessary data to generate the quantification plots and phenotype maps in Fig. 3 and S5-8 using the above code.
+
+## Script for OT-2 automation
+
+We are providing interested users with templates of the python scripts for PASTA automation on the OT-2 liquid handling platform.
+
+
+| File Name                              | Description                                             |
+|----------------------------------------|---------------------------------------------------------|
+| `automation/PASTA_oligoHRP_automation.py`                | Flexible automation script for up to 4 samples and up to 32 cycles    |
+
+
+## Contributors
+- Hendrik A. Michel
+- Wenrui Wu
+- Huaying Qiu
+- Sizun Jiang
+
+## Contact
+
+For inquiries regarding this repository, please contact Sizun Jiang ([sjiang3@bidmc.harvard.edu](sjiang3@bidmc.harvard.edu)) and Hendrik Michel ([hmichel@bidmc.harvard.edu](hmichel@bidmc.harvard.edu)).
+
+## Citation
+
+To cite this work, please cite:
+Michel et al. (2025), "PASTA: Versatile Tyramide-oligonucleotide Amplification for Multi-modal Spatial Biology", bioRxiv, 2025.04.30.651463; doi: 10.1101/2025.04.30.651463
