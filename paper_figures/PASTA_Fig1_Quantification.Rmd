@@ -695,9 +695,7 @@ df_fig1d_plot <- df_fig1d %>%
       stringr::str_detect(RawMarkers, "Iba1") ~ "Iba1",
       stringr::str_detect(RawMarkers, "CD163") ~ "CD163",
       stringr::str_detect(RawMarkers, "FoxP3") ~ "FoxP3",
-      stringr::str_detect(RawMarkers, "CD57") ~ "CD57",
-      stringr::str_detect(RawMarkers, "ICOS") ~ "ICOS",
-      stringr::str_detect(RawMarkers, "Pax5") ~ "Pax5"      
+      stringr::str_detect(RawMarkers, "CD57") ~ "CD57"    
     )
   ) %>%
   replace_zeros_with_min(
