@@ -6,7 +6,7 @@
 
 ## Abstract
 
-Spatial proteomics techniques have revolutionized our understanding of tissue architecture, but are frequently limited by detection sensitivity, bioconjugation limitations, multiplexing capacity, and multi-modal integration. A critical gap remains between high-plex spatial discovery platforms and clinically deployable biomarker assays. Here we present Protein and nucleic Acid Serial Tyramide Amplification (PASTA), a novel signal amplification approach that significantly enhances detection sensitivity while maintaining compatibility with diverse spatial profiling methodologies. PASTA utilizes horseradish peroxidase (HRP) recruitment pathways to generate tyramide radicals that deposit oligonucleotides, enabling adaptable signal amplification across multiple biomarkers at high-plex via cyclical imaging using complementary fluorophore-labeled oligonucleotides. We demonstrate that PASTA achieves extensive signal enhancement for markers with minimal background in blank controls. The method is compatible with *in situ* hybridization for DNA/RNA detection, proximity ligation assays for protein-protein interactions, sequential antibody staining protocols, or any modular combination thereof. This enables post-hoc rescue of markers with suboptimal signal-to-noise ratios, integration of conjugation-resistant antibodies, and extended multiplexing of commercial RNA *in situ* hybridization  with simultaneous protein co-detection from precious clinical samples without requiring additional tissue sections or costly reagents. PASTA is compatible with FFPE clinical samples and works with established commercial platforms and off-the-shelf reagents, requiring no specialized equipment. As we progress towards high-plex spatial multi-omics discovery efforts, PASTA is well situated as a cost-effective bridge from discovery to clinically deployable spatial multi-omics biomarker validation.
+Spatial proteomics is limited by detection sensitivity, multiplexing, and multi-modal integration, leaving a gap between discovery and clinical assays. Here we present Protein and nucleic Acid Serial Tyramide Amplification (PASTA), employing horseradish peroxidase-mediated oligonucleotide deposition and cyclical imaging for high-plex, multi-modal spatial profiling. Compatible with conjugated antibodies and *in situ* hybridization, PASTA enables simultaneous protein and RNA co-detection from FFPE samples, providing a cost-effective bridge from discovery to clinical validation.
 
 
 
@@ -25,13 +25,13 @@ An overview of the purpose of different scripts to reproduce the figures in the 
 
 | File Name                              | Description                                             |
 |----------------------------------------|---------------------------------------------------------|
-| `paper_figures/PASTA_Fig1_Quantification.Rmd`                 | Code for plots in Figure 1 and corresponding Supplemental Figures S1-3    |
-| `paper_figures/PASTA_Fig3_Quantification.Rmd`                 | Code for plots in Figure 3 and corresponding Supplemental Figures S5-8    |
-| `paper_figures/PASTA_Fig3_PhenotypeMaps.ipynb`                | Code for phenotype maps in Figure 3C and corresponding Supplemental Figures S6 and S8C |
+| `paper_figures/PASTA_Fig1_Quantification.Rmd`                 | Code for plots in Figure 1 and corresponding Extended Data Figures 1-5    |
+| `paper_figures/PASTA_Fig2_Quantification.Rmd`                 | Code for plots in Figure 2 and corresponding Extended Data Figures 6-10    |
+| `paper_figures/PASTA_Fig2_PhenotypeMaps.ipynb`                | Code for phenotype maps in Figure 2C and corresponding Extended Data Figure 7, 10B and Supplementary Figures 1-2 |
 
 ### Data Availability
 
-The code is designed to work with the data available on [Zenodo](https://doi.org/10.5281/zenodo.18525925). The "data" folder in Fig1_data.zip contains all necessary data to generate the quantification plots in Fig. 1 and S1-3 using the above code. The "data" folder in Fig3_data.zip contains all necessary data to generate the quantification plots and phenotype maps in Fig. 3 and S5-8 using the above code.
+The code is designed to work with the data available on [Zenodo](https://doi.org/10.5281/zenodo.18525925). The "data" folder in Fig1_data.zip contains all necessary data to generate the quantification plots in Fig. 1 and Extended Data Fig. 1-5 using the above code. The "data" folder in Fig2_data.zip contains all necessary data to generate the quantification plots and phenotype maps in Fig. 2, Extended Data Fig. 7, and Supplementary Fig. 1-2 using the above code.
 
 ## Script for OT-2 automation
 

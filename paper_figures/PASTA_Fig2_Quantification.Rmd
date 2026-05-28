@@ -1,7 +1,7 @@
 ---
-title: "PASTA_Figure3_Quantification"
+title: "PASTA_Figure2_Quantification"
 author: "Hendrik A. Michel"
-date: "2026-02-08"
+date: "2026-05-10"
 output: 
     html_document:    
         toc: true    
@@ -136,15 +136,14 @@ constants <- setup_plotting_constants()
 ## Load data frames
 ```{r}
 
-annotation <- read_csv("data/Fig3/04_final_data/Fig3_final_annotation.csv") %>%
+annotation <- read_csv("data/Fig2/04_final_data/Fig2_final_annotation.csv") %>%
   select(-clustering_id)
 
-df_normRawFeatures <- read_csv("data/Fig3/04_final_data/Fig3_NormFeaturesCellData.csv") %>%
-  filter(TMA == "A4")
+df_normRawFeatures <- read_csv("data/Fig2/04_final_data/Fig2_NormFeaturesCellData.csv")
 
-df_normPercentileFeatures <- read_csv("data/Fig3/04_final_data/Fig3_NormPercentileFeaturesCellData.csv")
+df_normPercentileFeatures <- read_csv("data/Fig2/04_final_data/Fig2_NormPercentileFeaturesCellData.csv")
 
-df_finalFeatures <- read_csv("data/Fig3/04_final_data/Fig3_FinalFeaturesCellData.csv")
+df_finalFeatures <- read_csv("data/Fig2/04_final_data/Fig2_FinalFeaturesCellData.csv")
 
 ```
 
@@ -221,7 +220,7 @@ df_finalFeatures_annotated <- df_finalFeatures %>%
 ```
 
 # Main Figures
-## Figure 3C
+## Figure 2C
 ```{r}
 ## Get proportion of all cell types by core by TMA
 df_prop <- annotation %>%
@@ -236,16 +235,7 @@ plot_df <- df_prop %>%
   select(-count) %>%
   pivot_wider(names_from = TMA, values_from = proportion, values_fill = 0)
 
-## Generate correlation data
-fit <- lm(A3 ~ A4, data = plot_df)
-
-stats <- plot_df %>%
-  summarise(
-    r  = cor(A4, A3, use = "complete.obs"),
-    r2 = summary(lm(A3 ~ A4))$r.squared
-  )
-
-fig3c <- plot_df %>%
+fig2c <- plot_df %>%
   ggplot(aes(x = A4, y = A3, color = annotation)) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray60") +
   geom_point(size = 6, alpha = 0.95) +
@@ -256,27 +246,37 @@ fig3c <- plot_df %>%
         axis.line = element_line(color = "black"),
         axis.ticks = element_line(color = "black"))
 
-print(fig3c)
+print(fig2c)
 
-fig3c <- fig3c +
+fig2c <- fig2c +
   theme(legend.position = "none")
 
-ggsave("output/Fig3/Fig3C.pdf", create.dir = TRUE, width = 5, height = 5, units = "in", dpi = 300)
+ggsave("output/Fig2/Fig2C.pdf", create.dir = TRUE, width = 5, height = 5, units = "in", dpi = 300)
 ```
 
-## Figure 3D
+```{r}
+# --- Stats: Fig 2C ---
+cat("Fig 2C - Correlation test (overall A4 vs A3):\n")
+cor_test_2c <- cor.test(plot_df$A4, plot_df$A3, use = "complete.obs", method = "pearson")
+cat("r  =", round(cor_test_2c$estimate, 6), "\n")
+cat("r2 =", round(cor_test_2c$estimate^2, 6), "\n")
+cat("p  =", cor_test_2c$p.value, "\n")
+```
+
+
+## Figure 2D
 ```{r}
 df <- df_normPercentileFeatures_annotated %>%
   apply_factor_levels(constants)
 
-df_3D <- df %>%
+df_2D <- df %>%
   filter((annotation == "Tumor" & disease != "Healthy") | (annotation == "B" & disease == "Healthy")) %>%
   select(CXCR5, `CXCR5-RNA`, core, disease, cell_id, cellSize) %>%
   pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
   group_by(core, disease, marker) %>%
   summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop")
 
-fig3d <- ggplot(df_3D, aes(x = marker, y = median_expression, fill = disease)) +
+fig2d <- ggplot(df_2D, aes(x = marker, y = median_expression, fill = disease)) +
   geom_violin(scale = "width",
               width = 0.5,
               trim = TRUE,
@@ -294,27 +294,27 @@ fig3d <- ggplot(df_3D, aes(x = marker, y = median_expression, fill = disease)) +
   theme_minimal() +
   theme(panel.grid.major.x = element_blank())
 
-print(fig3d)
+print(fig2d)
 
-fig3d <- fig3d +
+fig2d <- fig2d +
   theme(legend.position = "none")
 
-ggsave("output/Fig3/Fig3D.pdf", width = 10, height = 5, units = "in", dpi = 300)
+ggsave("output/Fig2/Fig2D.pdf", width = 10, height = 5, units = "in", dpi = 300)
 ```
 
-## Figure 3E
+## Figure 2E
 ```{r}
 df <- df_normPercentileFeatures_annotated %>%
   apply_factor_levels(constants)
 
-df_3E <- df %>%
+df_2E <- df %>%
   filter(annotation %in% c("CD4T", "CD8T", "Treg")) %>%
   select(CD69, `CTLA-4`, core, disease, cell_id, cellSize, annotation) %>%
   pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
   group_by(core, disease, marker, annotation) %>%
   summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop")
 
-fig3e <- ggplot(df_3E, aes(x = interaction(annotation, marker, sep = "|"), y = median_expression, fill = disease)) +
+fig2E <- ggplot(df_2E, aes(x = interaction(annotation, marker, sep = "|"), y = median_expression, fill = disease)) +
   geom_violin(scale = "width",
               width = 0.5,
               trim = TRUE,
@@ -334,21 +334,21 @@ fig3e <- ggplot(df_3E, aes(x = interaction(annotation, marker, sep = "|"), y = m
         panel.grid.major.x = element_blank(),
         panel.grid.minor.x = element_blank())
 
-print(fig3e)
+print(fig2E)
 
-fig3e <- fig3e +
+fig2E <- fig2E +
   theme(legend.position = "none")
 
-ggsave("output/Fig3/Fig3E.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
+ggsave("output/Fig2/Fig2E.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
 ```
 
-## Figure 3F
+## Figure 2F
 ```{r}
 df <- df_normRawFeatures_annotated %>%
   apply_factor_levels(constants)
 
 ## CD57
-df_3F_CD57 <- df %>%
+df_2F_CD57 <- df %>%
   filter(annotation %in% c("CD4T", "CD8T", "Treg")) %>%
   select(redo_CD57con, redo_CD57Tyr, core, disease, cell_id, cellSize, annotation) %>%
   pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
@@ -356,7 +356,7 @@ df_3F_CD57 <- df %>%
   summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop") %>%
   mutate(median_expression = 2000 * median_expression)
 
-ggplot(df_3F_CD57, aes(x = interaction(marker, annotation, sep = "|"), y = median_expression, fill = disease)) +
+ggplot(df_2F_CD57, aes(x = interaction(marker, annotation, sep = "|"), y = median_expression, fill = disease)) +
   geom_violin(scale = "width",
               width = 0.5,
               trim = TRUE,
@@ -380,10 +380,10 @@ ggplot(df_3F_CD57, aes(x = interaction(marker, annotation, sep = "|"), y = media
         panel.grid.major.x = element_blank(),
         panel.grid.minor.y = element_blank())
 
-ggsave("output/Fig3/Fig3F_CD57.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
+ggsave("output/Fig2/Fig2F_CD57.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
 
 ## ICOS
-df_3F_ICOS <- df %>%
+df_2F_ICOS <- df %>%
   filter(annotation %in% c("CD4T", "CD8T", "Treg")) %>%
   select(redo_ICOScon, redo_ICOSTyr, core, disease, cell_id, cellSize, annotation) %>%
   pivot_longer(cols = c(1:2), names_to = "marker", values_to = "expression") %>%
@@ -391,7 +391,7 @@ df_3F_ICOS <- df %>%
   summarize(median_expression = median(expression, na.rm = TRUE), .groups = "drop") %>%
   mutate(median_expression = 1000 * median_expression)
 
-ggplot(df_3F_ICOS, aes(x = interaction(marker, annotation, sep = "|"), y = median_expression, fill = disease)) +
+ggplot(df_2F_ICOS, aes(x = interaction(marker, annotation, sep = "|"), y = median_expression, fill = disease)) +
   geom_violin(scale = "width",
               width = 0.5,
               trim = TRUE,
@@ -415,11 +415,11 @@ ggplot(df_3F_ICOS, aes(x = interaction(marker, annotation, sep = "|"), y = media
         panel.grid.major.x = element_blank(),
         panel.grid.minor.y = element_blank())
 
-ggsave("output/Fig3/Fig3F_ICOS.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
+ggsave("output/Fig2/Fig2F_ICOS.pdf", width = 10, height = 5.5, units = "in", dpi = 300)
 ```
 
-# Supplemental Figures
-## Figure S5B
+# Extended Data Figures
+## Extended Data Figure 6B
 ```{r}
 
 annotation_markers = c("CD3con", "cd4", "CD8", "FoxP3", "CD11c", "CD68", "CD163", "CD30", "CD56", "CD45", "CD20", "Pax5")
@@ -736,19 +736,19 @@ p_legend <- plot_annotation_marker_heatmap(
   legend = TRUE
 )
 
-ggsave("output/SuppsFig3/FigS5B_CODEX_Hodgkin.pdf", create.dir = TRUE, plot = p_A3_HD, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig6B_CODEX_Hodgkin.pdf", create.dir = TRUE, plot = p_A3_HD, device = cairo_pdf,
        width = 2.5, height = 2.5, units = "in")
-ggsave("output/SuppsFig3/FigS5B_PASTA_Hodgkin.pdf", plot = p_A4_HD, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig6B_PASTA_Hodgkin.pdf", plot = p_A4_HD, device = cairo_pdf,
        width = 2.5, height = 2.5, units = "in")
-ggsave("output/SuppsFig3/FigS5B_CODEX_DLBCL.pdf", plot = p_A3_DLBCL, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig6B_CODEX_DLBCL.pdf", plot = p_A3_DLBCL, device = cairo_pdf,
        width = 2.5, height = 2.5, units = "in")
-ggsave("output/SuppsFig3/FigS5B_PASTA_DLBCL.pdf", plot = p_A4_DLBCL, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig6B_PASTA_DLBCL.pdf", plot = p_A4_DLBCL, device = cairo_pdf,
        width = 2.5, height = 2.5, units = "in")
-ggsave("output/SuppsFig3/FigS5B_CODEX_LNT.pdf", plot = p_A3_Healthy, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig6B_CODEX_LNT.pdf", plot = p_A3_Healthy, device = cairo_pdf,
        width = 2.5, height = 2.5, units = "in")
-ggsave("output/SuppsFig3/FigS5B_PASTA_LNT.pdf", plot = p_A4_Healthy, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig6B_PASTA_LNT.pdf", plot = p_A4_Healthy, device = cairo_pdf,
        width = 2.5, height = 2.5, units = "in")
-ggsave("output/SuppsFig3/FigS5B_heatmap_legend.pdf", plot = p_legend, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig6B_heatmap_legend.pdf", plot = p_legend, device = cairo_pdf,
        width = 2.5, height = 2.5, units = "in")
 
 print(p_A3_HD)
@@ -760,9 +760,20 @@ print(p_A4_Healthy)
 print(p_legend)
 
 ```
+```{r}
+# --- N: Extended Data Fig 6B ---
+# Heatmap: N = total cells per panel
+
+cat("Extended Data Fig 6B - N total cells per panel:\n")
+df_combined %>%
+  dplyr::group_by(TMA, disease) %>%
+  dplyr::summarise(N = n(), .groups = "drop") %>%
+  dplyr::arrange(disease, TMA) %>%
+  print()
+```
 
 
-## Figure S7A
+## Extended Data Figure 7A
 
 ```{r}
 df <- annotation %>%
@@ -852,11 +863,11 @@ heatmap_plot <- ggplot(plot_df, aes(x = annotation, y = disease, fill = r)) +
 
 print(heatmap_plot)
 
-ggsave("output/SuppsFig3/FigS7A.pdf", width = 4.5, height = 2.25, units = "in", dpi = 300)
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig8A.pdf", width = 4.5, height = 2.25, units = "in", dpi = 300)
 ```
 
 
-## Figure S7B
+## Extended Data Figure 8B
 ```{r}
 df <- df_normRawFeatures_annotated %>%
   apply_factor_levels(constants)
@@ -892,11 +903,11 @@ ggplot(df_CD3Tyr, aes(x = interaction(marker, annotation, sep = "|"), y = median
         panel.grid.major.x = element_blank(),
         panel.grid.minor.y = element_blank())
 
-ggsave("output/SuppsFig3/FigS7B.pdf", width = 9, height = 10, units = "in", dpi = 300)
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig8B.pdf", width = 9, height = 10, units = "in", dpi = 300)
 
 ```
 
-## Figure S8A
+## Extended Data Figure 9
 ```{r}
 df <- df_normPercentileFeatures_annotated %>%
   select(unit_id, TMA, core, TMA_core, disease, annotation, CXCR5, `CXCR5-RNA`) %>%
@@ -959,28 +970,32 @@ make_scatter_plot <- function(scatter_df, ann_levels,
       y_log10 = log10(CXCR5)
     )
 
-  stats_df <- plot_df %>%
-    group_by(disease, annotation) %>%
-    summarise(
-      n  = n(),
-      r2 = summary(lm(y_log10 ~ x_log10))$r.squared,
-      p  = suppressWarnings(cor.test(x_log10, y_log10, method = "pearson")$p.value),
-      .groups = "drop"
-    ) %>%
-    mutate(
-      p_txt = case_when(
-        is.na(p)   ~ "p = NA",
-        p < 0.0001 ~ "p < 0.0001",
-        p < 0.001  ~ "p < 0.001",
-        p < 0.01   ~ "p < 0.01",
-        p < 0.05   ~ "p < 0.05",
-        TRUE       ~ paste0("p = ", sprintf("%.4f", p))
-      ),
-      stat_label = paste0(
-        "R\u00B2 = ", sprintf("%.4f", r2), "\n", p_txt
-      ),
-      n_label = paste0("n = ", n)
-    )
+stats_df <- plot_df %>%
+  group_by(disease, annotation) %>%
+  summarise(
+    n  = n(),
+    r  = cor(x_log10, y_log10, use = "complete.obs"),
+    r2 = summary(lm(y_log10 ~ x_log10))$r.squared,
+    p  = suppressWarnings(cor.test(x_log10, y_log10, method = "pearson")$p.value),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    # Compute log10(p) via t-distribution to avoid underflow
+    log10_p = {
+      t_stat <- r * sqrt(n - 2) / sqrt(pmax(1 - r^2, .Machine$double.eps))
+      log_p  <- pt(-abs(t_stat), df = n - 2, log.p = TRUE) + log(2)
+      log_p / log(10)
+    },
+    p_txt = dplyr::if_else(
+      is.na(log10_p),
+      "p = NA",
+      paste0("p = 10^(", round(log10_p), ")")
+    ),
+    stat_label = paste0(
+      "R\u00B2 = ", sprintf("%.4f", r2), "\n", p_txt
+    ),
+    n_label = paste0("n = ", n)
+  )
 
   ggplot(plot_df, aes(x = x_log10, y = y_log10)) +
     ggrastr::geom_point_rast(alpha = 0.25, size = 0.6, raster.dpi = raster_dpi) +
@@ -1038,14 +1053,17 @@ ann_levels_2 <- c("DC", "M1", "M2", "NK", "Other")
 p1 <- make_scatter_plot(df_RNA_protein, ann_levels_1)
 p2 <- make_scatter_plot(df_RNA_protein, ann_levels_2)
 
-ggsave("output/SuppsFig3/FigS8A_1.pdf", plot = p1, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig9_1.pdf", plot = p1, device = cairo_pdf,
        width = 8, height = 4.7, units = "in")
-ggsave("output/SuppsFig3/FigS8A_2.pdf", plot = p2, device = cairo_pdf,
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig9_2.pdf", plot = p2, device = cairo_pdf,
        width = 8, height = 4.7, units = "in")
+
+p1
+p2
 ```
 
 
-## Figure S8B
+## Extended Data Figure 10A
 
 ```{r}
 df <- df_normPercentileFeatures_annotated %>%
@@ -1077,7 +1095,7 @@ ggplot(df_CXCL9, aes(x = interaction(annotation, marker), y = median_expression,
   theme(legend.position = "none",
         panel.grid.major.x = element_blank())
 
-ggsave("output/SuppsFig3/FigS8B.pdf", width = 8.5, height = 5, units = "in", dpi = 300)
+ggsave("output/ExtendedDataForFig2/ExtendedDataFig10A.pdf", width = 8.5, height = 5, units = "in", dpi = 300)
 ```
 
 

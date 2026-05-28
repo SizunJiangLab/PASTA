@@ -416,17 +416,19 @@ plot_violin_by_condition <- function(
       position = ggplot2::position_dodge(dodge_width),
       adjust = 1.5,
       scale = "width",
-      trim = FALSE,
+      trim = TRUE,
       colour = "black",
-      linewidth = ai_pt_to_mm(0.5)
+      linewidth = ai_pt_to_mm(0.5),
+      draw_quantiles = 0.5
     ) +
-    ggplot2::geom_boxplot(
-      position = ggplot2::position_dodge(dodge_width),
-      width = 0.15,
-      outlier.shape = NA,
-      alpha = 0.5,
-      colour = "black",
-      linewidth = ai_pt_to_mm(0.5)
+    ggplot2::geom_point(
+      position = ggplot2::position_jitterdodge(
+        jitter.width = 0.15,
+        jitter.height = 0,
+        dodge.width = dodge_width
+      ),
+      size = 0.5,
+      alpha = 1
     ) +
     ggplot2::coord_cartesian(ylim = ylim) +
     ggplot2::scale_y_continuous(
@@ -483,11 +485,11 @@ plot_violin_by_condition <- function(
 ```
 
 
-# Figure 1B + 1C
+# Figure 1B + Extended Data Figure 1C
 ## Load data frame
 ```{r}
 
-df_fig1bc_f <- "data/Fig1BC_S1AB/05_Fig1BC_S1AB_Stripped_CombinedFeatures.csv"
+df_fig1bc_f <- "data/Fig1B_EDFig1ABC/05_Fig1B_EDFig1ABC_Stripped_CombinedFeatures.csv"
 
 df_fig1bc <- read_csv(df_fig1bc_f)
 
@@ -497,9 +499,9 @@ df_fig1bc <- read_csv(df_fig1bc_f)
 ```{r}
 # CD3
 df_cd3 <- df_fig1bc %>%
-  dplyr::select(source, CD3con250ms, CD3con250msBL, CD3tsaA250ms, CD3tsaA250msBL) %>%
+  dplyr::select(source, CD3con250ms, CD3con250msBL, CD3tsa250ms, CD3tsa250msBL) %>%
   tidyr::pivot_longer(
-    cols = c(CD3con250ms, CD3con250msBL, CD3tsaA250ms, CD3tsaA250msBL),
+    cols = c(CD3con250ms, CD3con250msBL, CD3tsa250ms, CD3tsa250msBL),
     names_to = "Marker",
     values_to = "Expression"
   ) %>%
@@ -553,16 +555,16 @@ df_iba1 <- df_fig1bc %>%
     condition = factor(condition, levels = c("Signal", "Blank"))
   )
 
-# Fig1C
-df_fig1c <- df_fig1bc %>%
+# Extended Data Fig. 1C
+df_edfig1c <- df_fig1bc %>%
   dplyr::select(source, cellLabel, 
                 FASLcon50ms, FASLtsa50ms,
-                cd45RAcon50ms, CD45RAtsa50ms,
+                CD45RAcon50ms, CD45RAtsa50ms,
                 PDL1con250ms, PDL1tsa250ms,
                 CD20con250ms, CD20tsa250ms,
                 CD11ccon250ms, CD11ctsaA250ms) %>%
   tidyr::pivot_longer(
-    cols = c(FASLcon50ms, FASLtsa50ms, cd45RAcon50ms, CD45RAtsa50ms,
+    cols = c(FASLcon50ms, FASLtsa50ms, CD45RAcon50ms, CD45RAtsa50ms,
              PDL1con250ms, PDL1tsa250ms, CD20con250ms, CD20tsa250ms,
              CD11ccon250ms, CD11ctsaA250ms),
     names_to = "RawMarker",
@@ -604,6 +606,23 @@ df_fig1c <- df_fig1bc %>%
 
 ```
 
+```{r}
+# --- N per violin: Fig 1B CD3 ---
+# Groups: y = concentration level, condition = Signal/Blank
+cat("Fig 1B CD3 - N per violin:\n")
+df_cd3 %>% dplyr::count(y, condition) %>% print()
+
+# --- N per violin: Fig 1B IBA1 ---
+cat("\nFig 1B IBA1 - N per violin:\n")
+df_iba1 %>% dplyr::count(y, condition) %>% print()
+
+# --- N per violin: Extended Data Fig 1C ---
+# Groups: y = marker, method = PASTA/Unamplified
+cat("\nFig 1C - N per violin:\n")
+df_edfig1c %>% dplyr::count(y, method) %>% print()
+```
+
+
 ## Plots
 
 ```{r}
@@ -639,9 +658,9 @@ fig_iba1
 ```
 
 ```{r}
-## Fig. 1C
-fig_1c <- plot_violin_comparison(
-  df_fig1c,
+## Extended Data Fig. 1C
+edfig_1c <- plot_violin_comparison(
+  df_edfig1c,
   aes_fill = "method",
   fill_values = c("Unamplified" = "#e25726", "PASTA" = "#377EB8"),
   xlim = c(50, NA),
@@ -650,96 +669,19 @@ fig_1c <- plot_violin_comparison(
   axis_angle = 45,
   base_size = 6,
   dodge_width = 0.8,
-  filename = "output/Fig1/Fig1C.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig1C.pdf",
   width_pt = 190,
   height_pt = 160
 )
-fig_1c
+edfig_1c
 ```
 
-# Figure 1D
-## Load data frame
-```{r}
-df_fig1d_f <- "data/Fig1D_S2/03_Fig1D_S2_RawFeaturesCellData.csv"
-
-df_fig1d <- read_csv(df_fig1d_f)
-```
-
-## Process data frame
-```{r}
-# Prepare data
-df_fig1d_plot <- df_fig1d %>%
-  dplyr::filter(condition == "NegCtrlFig1RedoSlide") %>% ## This is the same as the "Complete Panel" slide
-  dplyr::select(cellLabel, CD3con, CD3Tyr, CD11ccon, CD11cTyr, CD20con, CD20Tyr, 
-                PD1con_02, PD1Tyr_02, CD8con, CD8Tyr, CD4con, CD4Tyr, 
-                Iba1con_02, Iba1Tyr_02, CD163con, CD163Tyr, FoxP3con, FoxP3Tyr, 
-                CD57con_02, CD57Tyr_02) %>%
-  tidyr::pivot_longer(
-    cols = -cellLabel,
-    names_to = "RawMarkers",
-    values_to = "Expression"
-  ) %>%
-  dplyr::mutate(
-    Signal = dplyr::case_when(
-      stringr::str_detect(RawMarkers, "con") ~ "Unamp",
-      stringr::str_detect(RawMarkers, "Tyr") ~ "PASTA",
-      TRUE ~ NA_character_
-    ),
-    Marker = dplyr::case_when(
-      stringr::str_detect(RawMarkers, "CD3") ~ "CD3",
-      stringr::str_detect(RawMarkers, "CD11c") ~ "CD11c",
-      stringr::str_detect(RawMarkers, "CD20") ~ "CD20",
-      stringr::str_detect(RawMarkers, "PD1") ~ "PD-1",
-      stringr::str_detect(RawMarkers, "CD8") ~ "CD8",
-      stringr::str_detect(RawMarkers, "CD4") ~ "CD4",
-      stringr::str_detect(RawMarkers, "Iba1") ~ "Iba1",
-      stringr::str_detect(RawMarkers, "CD163") ~ "CD163",
-      stringr::str_detect(RawMarkers, "FoxP3") ~ "FoxP3",
-      stringr::str_detect(RawMarkers, "CD57") ~ "CD57"    
-    )
-  ) %>%
-  replace_zeros_with_min(
-    value_col = "Expression",
-    group_cols = "RawMarkers"
-  ) %>%
-  dplyr::mutate(
-    x = Expression,
-    y = factor(Marker, levels = c("Iba1", "CD57", "FoxP3", "CD8", "CD4", "CD163", "PD-1", "CD20", "CD11c", "CD3")),
-    Signal = factor(Signal, levels = c("PASTA", "Unamp"))
-  )
-```
-
-## Plot data frame
-```{r}
-# Plot
-fig_1d <- plot_violin_comparison(
-  df_fig1d_plot,
-  aes_fill = "Signal",
-  fill_values = c(
-    "Unamp" = "#e25726",
-    "PASTA" = RColorBrewer::brewer.pal(9, "Set1")[2]
-  ),
-  xlim = c(0.01, 70000),
-  x_breaks = c(0.01, 0.1, 1, 10, 100, 1000, 10000),
-  labs_title = "Figure 1D",
-  axis = TRUE,
-  axis_angle = 45,
-  base_size = 6,
-  dodge_width = 0.8,
-  filename = "output/Fig1/Fig1D.pdf",
-  width_pt = 190,
-  height_pt = 190
-)
-fig_1d
-```
-
-
-# Figure S1B
+# Extended Data Figure 1B
 ## Load data frames
 ```{r}
 
-df_stripped_f <- "data/Fig1BC_S1AB/05_Fig1BC_S1AB_Stripped_CombinedFeatures.csv"
-df_NOTstripped_f <- "data/Fig1BC_S1AB/05_Fig1BC_S1AB_NotStripped_CombinedFeatures.csv"
+df_stripped_f <- "data/Fig1B_EDFig1ABC/05_Fig1B_EDFig1ABC_Stripped_CombinedFeatures.csv"
+df_NOTstripped_f <- "data/Fig1B_EDFig1ABC/05_Fig1B_EDFig1ABC_NotStripped_CombinedFeatures.csv"
 
 
 df_stripped <- read_csv(df_stripped_f)
@@ -786,6 +728,14 @@ df_cd11c_stripping <- df_NOTstripped %>%
 
 ```
 
+```{r}
+# --- N per violin: Extended Data Figure 1B ---
+# Groups: y = Marker (Oligo1/Oligo2/Blank/Unamplified), strip_status
+cat("Extended Data Figure 1B - N per violin:\n")
+df_cd11c_stripping %>% dplyr::count(y, strip_status) %>% print()
+```
+
+
 ## Plot
 ```{r}
 # Plot
@@ -797,122 +747,76 @@ fig_cd11c_stripping <- plot_violin_comparison(
     "Stripped" = RColorBrewer::brewer.pal(9, "Set1")[2]
   ),
   xlim = c(100, NA),
-  labs_title = "Supp Figure 1B - CD11c Stripping",
+  labs_title = "Extended Data Figure 1B - CD11c Stripping",
   axis = TRUE,
   axis_angle = 45,
   base_size = 10,
   dodge_width = 0.95,
-  filename = "output/SuppsFig1/FigS1B_CD11c_Stripping.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig1B.pdf",
   width_pt = 230,
   height_pt = 180
 )
 fig_cd11c_stripping
 ```
 
-# Figure S1C
+# Extended Data Figure 1D
 ## Load dataframe
 ```{r}
-df_figs1c_f <- "data/FigS1C/02_FigS1C_RepDep_High_SCFeatures_ScaleSize.csv"
+df_edfig1d_f <- "data/EDFig1D/01_EDFig1D_linescans.csv"
 
-df_figs1c <- read_csv(df_figs1c_f)
+df_edfig1d <- read_csv(df_edfig1d_f)
 ```
 
 ## Prepare data for plotting
 ```{r}
-# CD3 Markers
-df_cd3_markers <- df_figs1c %>%
-  dplyr::select(CD3con, CD3Tyr1, CD3Tyr2, CD3Tyr3, CD3Tyr4) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = "Marker",
-    values_to = "Expression"
-  ) %>%
-  replace_zeros_with_min(
-    value_col = "Expression",
-    group_cols = "Marker"
-  ) %>%
-  dplyr::mutate(
-    x = factor(Marker, levels = c("CD3con", "CD3Tyr1", "CD3Tyr2", "CD3Tyr3", "CD3Tyr4")),
-    y = Expression
-  )
-
-# CD8 Markers
-df_cd8_markers <- df_figs1c %>%
-  dplyr::select(CD8con, CD8Tyr1, CD8Tyr2, CD8Tyr3, CD8Tyr4) %>%
-  tidyr::pivot_longer(
-    cols = dplyr::everything(),
-    names_to = "Marker",
-    values_to = "Expression"
-  ) %>%
-  replace_zeros_with_min(
-    value_col = "Expression",
-    group_cols = "Marker"
-  ) %>%
-  dplyr::mutate(
-    x = factor(Marker, levels = c("CD8con", "CD8Tyr1", "CD8Tyr2", "CD8Tyr3", "CD8Tyr4")),
-    y = Expression
-  )
-
+df_edfig1d_long <- df_edfig1d %>%
+  pivot_longer(-pixel_distance,
+               names_to  = c("image", "line"),
+               names_sep = "_",
+               values_to = "intensity")
 ```
 
 ## Plot
 ```{r}
-fig_cd3_markers <- plot_violin_vertical(
-  df_cd3_markers,
-  aes_fill = "Marker",  # Color by marker
-  fill_values = c(
-    CD3con = "#e15826",
-    CD3Tyr1 = RColorBrewer::brewer.pal(9, "GnBu")[2],
-    CD3Tyr2 = RColorBrewer::brewer.pal(9, "GnBu")[4],
-    CD3Tyr3 = RColorBrewer::brewer.pal(9, "GnBu")[6],
-    CD3Tyr4 = RColorBrewer::brewer.pal(9, "GnBu")[8]
-  ),
-  ylim = c(0.05, 50000),
-  y_breaks = c(0.1, 1, 10, 100, 1000, 10000),
-  show_x_text = TRUE,  # Show marker names on x-axis
-  base_size = 6,
-  dodge_width = 0,  # No dodging needed
-  filename = "output/SuppsFig1/FigS1C_CD3.pdf",
-  width_pt = 130,
-  height_pt = 90
-)
-fig_cd3_markers
+edfig1d <- ggplot(df_edfig1d_long, aes(x = pixel_distance, y = intensity, colour = image)) +
+  geom_line() +
+  scale_colour_manual(values = c("con" = "cyan", "tyr" = "magenta")) +
+  scale_linewidth(1) +
+  facet_wrap(~line, nrow = 2, axes = "all") +
+  labs(x = "Pixel Distance", y = "Intensity") +
+  theme_minimal() +
+  theme(
+    panel.grid      = element_blank(),
+    axis.line       = element_line(colour = "black"),
+    axis.ticks      = element_line(colour = "black"),
+    legend.position = "none",
+    text            = element_text(family = "Arial", size = 8, colour = "black")
+  )
 
-fig_cd8_markers <- plot_violin_vertical(
-  df_cd8_markers,
-  aes_fill = "Marker",
-  fill_values = c(
-    CD8con = "#e15826",
-    CD8Tyr1 = RColorBrewer::brewer.pal(9, "GnBu")[2],
-    CD8Tyr2 = RColorBrewer::brewer.pal(9, "GnBu")[4],
-    CD8Tyr3 = RColorBrewer::brewer.pal(9, "GnBu")[6],
-    CD8Tyr4 = RColorBrewer::brewer.pal(9, "GnBu")[8]
-  ),
-  ylim = c(0.1, 65000),
-  y_breaks = c(0.1, 1, 10, 100, 1000, 10000),
-  show_x_text = TRUE,
-  base_size = 6,
-  dodge_width = 0,
-  filename = "output/SuppsFig1/FigS1C_CD8.pdf",
-  width_pt = 130,
-  height_pt = 90
-)
-fig_cd8_markers
+
+ggsave("output/ExtendedDataForFig1/ExtendedDataFig1D.csv", plot = edfig1d,
+       width  = 170/72,
+       height = 170/72,
+       units  = "in",
+       device = cairo_pdf)
+
+edfig1d +
+  theme(legend.position = "right")
 ```
 
 
-# Figure S2
+# Extended Data Figure 2
 ## Load dataframes
 ```{r}
-df_figs2_f <- "data/Fig1D_S2/03_Fig1D_S2_RawFeaturesCellData.csv"
+df_edfig2_f <- "data/EDFig2_3A/03_EDFig2_3A_RawFeaturesCellData.csv"
 
-df_figs2 <- read_csv(df_figs2_f)
+df_edfig2 <- read_csv(df_edfig2_f)
 ```
 
 ## Prepare data for plotting
 ```{r}
 # Prepare data
-df_negctrl <- df_figs2 %>%
+df_negctrl <- df_edfig2 %>%
   dplyr::select(cellLabel, condition, 
                 CD4con_02, CD4Tyr_02, PD1con_02, PD1Tyr_02, 
                 CD3con, CD3Tyr, CD8con, CD8Tyr, 
@@ -1015,6 +919,23 @@ df_set4 <- df_negctrl %>%
 
 ```
 
+```{r}
+# --- N per violin: Extended Data Figure 2 ---
+# Groups: x = MarkerCond (Marker x condition interaction), Signal = PASTA/Unamp
+cat("Extended Data Figure 2 Set 1 - N per violin:\n")
+df_set1 %>% dplyr::count(x, Signal) %>% print()
+
+cat("\nExtended Data Figure 2 Set 2 - N per violin:\n")
+df_set2 %>% dplyr::count(x, Signal) %>% print()
+
+cat("\nExtended Data Figure 2 Set 3 - N per violin:\n")
+df_set3 %>% dplyr::count(x, Signal) %>% print()
+
+cat("\nExtended Data Figure 2 Set 4 - N per violin:\n")
+df_set4 %>% dplyr::count(x, Signal) %>% print()
+```
+
+
 ## Plot data
 ```{r}
 
@@ -1023,7 +944,7 @@ fig_set1 <- plot_violin_vertical(
   aes_fill = "Signal",
   fill_values = selected_colors,
   ylim = c(0.01, 50000),
-  filename = "output/SuppsFig1/FigS2_NegCtrl_Set1.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig2_Set1.pdf",
   show_x_text = TRUE,
   width_pt = 130,
   height_pt = 135
@@ -1035,7 +956,7 @@ fig_set2 <- plot_violin_vertical(
   aes_fill = "Signal",
   fill_values = selected_colors,
   ylim = c(0.01, 50000),
-  filename = "output/SuppsFig1/FigS2_NegCtrl_Set2.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig2_Set2.pdf",
   show_x_text = TRUE,
   width_pt = 130,
   height_pt = 135
@@ -1047,7 +968,7 @@ fig_set3 <- plot_violin_vertical(
   aes_fill = "Signal",
   fill_values = selected_colors,
   ylim = c(0.01, 50000),
-  filename = "output/SuppsFig1/FigS2_NegCtrl_Set3.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig2_Set3.pdf",
   show_x_text = TRUE,
   width_pt = 130,
   height_pt = 135
@@ -1059,7 +980,7 @@ fig_set4 <- plot_violin_vertical(
   aes_fill = "Signal",
   fill_values = selected_colors,
   ylim = c(0.01, 50000),
-  filename = "output/SuppsFig1/FigS2_NegCtrl_Set4.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig2_Set4.pdf",
   show_x_text = TRUE,
   width_pt = 130,
   height_pt = 135
@@ -1067,21 +988,210 @@ fig_set4 <- plot_violin_vertical(
 fig_set4
 ```
 
-# Figure S3A
+
+# Extended Data Figure 3A
 ## Load data frame
 ```{r}
-df_figs3a_f <- "data/FigS3A/03_FigS3A_median_combined.csv"
+df_edfig3a_f <- "data/EDFig2_3A/03_EDFig2_3A_RawFeaturesCellData.csv"
 
-df_figs3a <- read_csv(df_figs3a_f)
+df_edfig3a <- read_csv(df_edfig3a_f)
+```
+
+## Process data frame
+```{r}
+# Prepare data
+df_fig3a_plot <- df_edfig3a %>%
+  dplyr::filter(condition == "NegCtrlFig1RedoSlide") %>% ## This is the same as the "Complete Panel" slide
+  dplyr::select(cellLabel, CD3con, CD3Tyr, CD11ccon, CD11cTyr, CD20con, CD20Tyr, 
+                PD1con_02, PD1Tyr_02, CD8con, CD8Tyr, CD4con, CD4Tyr, 
+                Iba1con_02, Iba1Tyr_02, CD163con, CD163Tyr, FoxP3con, FoxP3Tyr, 
+                CD57con_02, CD57Tyr_02) %>%
+  tidyr::pivot_longer(
+    cols = -cellLabel,
+    names_to = "RawMarkers",
+    values_to = "Expression"
+  ) %>%
+  dplyr::mutate(
+    Signal = dplyr::case_when(
+      stringr::str_detect(RawMarkers, "con") ~ "Unamp",
+      stringr::str_detect(RawMarkers, "Tyr") ~ "PASTA",
+      TRUE ~ NA_character_
+    ),
+    Marker = dplyr::case_when(
+      stringr::str_detect(RawMarkers, "CD3") ~ "CD3",
+      stringr::str_detect(RawMarkers, "CD11c") ~ "CD11c",
+      stringr::str_detect(RawMarkers, "CD20") ~ "CD20",
+      stringr::str_detect(RawMarkers, "PD1") ~ "PD-1",
+      stringr::str_detect(RawMarkers, "CD8") ~ "CD8",
+      stringr::str_detect(RawMarkers, "CD4") ~ "CD4",
+      stringr::str_detect(RawMarkers, "Iba1") ~ "Iba1",
+      stringr::str_detect(RawMarkers, "CD163") ~ "CD163",
+      stringr::str_detect(RawMarkers, "FoxP3") ~ "FoxP3",
+      stringr::str_detect(RawMarkers, "CD57") ~ "CD57",
+      stringr::str_detect(RawMarkers, "ICOS") ~ "ICOS",
+      stringr::str_detect(RawMarkers, "Pax5") ~ "Pax5"      
+    )
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = "RawMarkers"
+  ) %>%
+  dplyr::mutate(
+    x = Expression,
+    y = factor(Marker, levels = c("Iba1", "CD57", "FoxP3", "CD8", "CD4", "CD163", "PD-1", "CD20", "CD11c", "CD3")),
+    Signal = factor(Signal, levels = c("PASTA", "Unamp"))
+  )
+```
+
+```{r}
+# --- N per violin: Extended Data Fig 3A ---
+# Groups: y = Marker, Signal = PASTA/Unamp
+cat("Extended Data Fig 3A - N per violin:\n")
+df_fig3a_plot %>% dplyr::count(y, Signal) %>% print()
+```
+
+
+## Plot data frame
+```{r}
+# Plot
+edfig3a <- plot_violin_comparison(
+  df_fig3a_plot,
+  aes_fill = "Signal",
+  fill_values = c(
+    "Unamp" = "#e25726",
+    "PASTA" = RColorBrewer::brewer.pal(9, "Set1")[2]
+  ),
+  xlim = c(0.01, 70000),
+  x_breaks = c(0.01, 0.1, 1, 10, 100, 1000, 10000),
+  labs_title = "Extended Data Figure 3A",
+  axis = TRUE,
+  axis_angle = 45,
+  base_size = 6,
+  dodge_width = 0.8,
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig3A.pdf",
+  width_pt = 190,
+  height_pt = 190
+)
+edfig3a
+```
+
+# Extended Data Figure 3B
+## Load dataframe
+```{r}
+df_edfig3b_f <- "data/EDFig3B/02_EDFig3B_RepDep_High_SCFeatures_ScaleSize.csv"
+
+df_edfig3b <- read_csv(df_edfig3b_f)
+```
+
+## Prepare data for plotting
+```{r}
+# CD3 Markers
+df_cd3_markers <- df_edfig3b %>%
+  dplyr::select(CD3con, CD3Tyr1, CD3Tyr2, CD3Tyr3, CD3Tyr4) %>%
+  tidyr::pivot_longer(
+    cols = dplyr::everything(),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = "Marker"
+  ) %>%
+  dplyr::mutate(
+    x = factor(Marker, levels = c("CD3con", "CD3Tyr1", "CD3Tyr2", "CD3Tyr3", "CD3Tyr4")),
+    y = Expression
+  )
+
+# CD8 Markers
+df_cd8_markers <- df_edfig3b %>%
+  dplyr::select(CD8con, CD8Tyr1, CD8Tyr2, CD8Tyr3, CD8Tyr4) %>%
+  tidyr::pivot_longer(
+    cols = dplyr::everything(),
+    names_to = "Marker",
+    values_to = "Expression"
+  ) %>%
+  replace_zeros_with_min(
+    value_col = "Expression",
+    group_cols = "Marker"
+  ) %>%
+  dplyr::mutate(
+    x = factor(Marker, levels = c("CD8con", "CD8Tyr1", "CD8Tyr2", "CD8Tyr3", "CD8Tyr4")),
+    y = Expression
+  )
+
+```
+
+```{r}
+# --- N per violin: Extended Data Figure 3B ---
+# No dodging (dodge_width = 0), so one violin per x level
+cat("Extended Data Figure 3B CD3 markers - N per violin:\n")
+df_cd3_markers %>% dplyr::count(x) %>% print()
+
+cat("\nExtended Data Figure 3B CD8 markers - N per violin:\n")
+df_cd8_markers %>% dplyr::count(x) %>% print()
+```
+
+
+## Plot
+```{r}
+fig_cd3_markers <- plot_violin_vertical(
+  df_cd3_markers,
+  aes_fill = "Marker",  # Color by marker
+  fill_values = c(
+    CD3con = "#e15826",
+    CD3Tyr1 = RColorBrewer::brewer.pal(9, "GnBu")[2],
+    CD3Tyr2 = RColorBrewer::brewer.pal(9, "GnBu")[4],
+    CD3Tyr3 = RColorBrewer::brewer.pal(9, "GnBu")[6],
+    CD3Tyr4 = RColorBrewer::brewer.pal(9, "GnBu")[8]
+  ),
+  ylim = c(0.05, 50000),
+  y_breaks = c(0.1, 1, 10, 100, 1000, 10000),
+  show_x_text = TRUE,  # Show marker names on x-axis
+  base_size = 6,
+  dodge_width = 0,  # No dodging needed
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig3B_CD3.pdf",
+  width_pt = 130,
+  height_pt = 90
+)
+fig_cd3_markers
+
+fig_cd8_markers <- plot_violin_vertical(
+  df_cd8_markers,
+  aes_fill = "Marker",
+  fill_values = c(
+    CD8con = "#e15826",
+    CD8Tyr1 = RColorBrewer::brewer.pal(9, "GnBu")[2],
+    CD8Tyr2 = RColorBrewer::brewer.pal(9, "GnBu")[4],
+    CD8Tyr3 = RColorBrewer::brewer.pal(9, "GnBu")[6],
+    CD8Tyr4 = RColorBrewer::brewer.pal(9, "GnBu")[8]
+  ),
+  ylim = c(0.1, 65000),
+  y_breaks = c(0.1, 1, 10, 100, 1000, 10000),
+  show_x_text = TRUE,
+  base_size = 6,
+  dodge_width = 0,
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig3B_CD8.pdf",
+  width_pt = 130,
+  height_pt = 90
+)
+fig_cd8_markers
+```
+
+# Extended Data Figure 4A
+## Load data frame
+```{r}
+df_edfig4a_f <- "data/EDFig4A/03_EDFig4A_median_combined.csv"
+
+df_edfig4a <- read_csv(df_edfig4a_f)
 
 ```
 
 ## Process data
 ```{r}
-df_figs3a$condition <- factor(df_figs3a$condition,
+df_edfig4a$condition <- factor(df_edfig4a$condition,
                               levels = c("thin", "medium", "thick"))
 
-df_cd3_condition <- df_figs3a %>%
+df_cd3_condition <- df_edfig4a %>%
   tidyr::pivot_longer(
     cols = -c(region_id, condition),
     names_to = "Marker",
@@ -1093,7 +1203,7 @@ df_cd3_condition <- df_figs3a %>%
     y = Expression
   )
 
-df_cd8_condition <- df_figs3a %>%
+df_cd8_condition <- df_edfig4a %>%
   tidyr::pivot_longer(
     cols = -c(region_id, condition),
     names_to = "Marker",
@@ -1105,7 +1215,7 @@ df_cd8_condition <- df_figs3a %>%
     y = Expression
   )
 
-df_cd11c_condition <- df_figs3a %>%
+df_cd11c_condition <- df_edfig4a %>%
   tidyr::pivot_longer(
     cols = -c(region_id, condition),
     names_to = "Marker",
@@ -1117,7 +1227,7 @@ df_cd11c_condition <- df_figs3a %>%
     y = Expression
   )
 
-df_cd69_condition <- df_figs3a %>%
+df_cd69_condition <- df_edfig4a %>%
   tidyr::pivot_longer(
     cols = -c(region_id, condition),
     names_to = "Marker",
@@ -1131,14 +1241,32 @@ df_cd69_condition <- df_figs3a %>%
 
 ```
 
+```{r}
+# --- N per violin: Extended Data Figure 4A ---
+# Groups: x = condition (thin/medium/thick), Marker = fill column
+cat("Extended Data Figure 4A CD3 - N per violin:\n")
+df_cd3_condition %>% dplyr::count(x, Marker) %>% print()
+
+cat("\nExtended Data Figure 4A CD8 - N per violin:\n")
+df_cd8_condition %>% dplyr::count(x, Marker) %>% print()
+
+cat("\nExtended Data Figure 4A CD11c - N per violin:\n")
+df_cd11c_condition %>% dplyr::count(x, Marker) %>% print()
+
+# CD69 has only one marker so just count by condition
+cat("\nExtended Data Figure 4A CD69 - N per violin:\n")
+df_cd69_condition %>% dplyr::count(x) %>% print()
+```
+
+
 ## Plot
 ```{r}
 fig_cd3_exp <- plot_violin_by_condition(
   df_cd3_condition,
   aes_fill = "Marker",
-  fill_values = RColorBrewer::brewer.pal(9, "Set1")[c(5, 2)],
+  fill_values = c("#e25726", RColorBrewer::brewer.pal(9, "Set1")[2]),
   ylim = c(300, 50000),
-  filename = "output/SuppsFig1/FigS3A_CD3.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig4A_CD3.pdf",
   show_x_text = TRUE,
   width_pt = 124,
   height_pt = 71
@@ -1148,9 +1276,9 @@ fig_cd3_exp
 fig_cd8_exp <- plot_violin_by_condition(
   df_cd8_condition,
   aes_fill = "Marker",
-  fill_values = RColorBrewer::brewer.pal(9, "Set1")[c(5, 2)],
+  fill_values = c("#e25726", RColorBrewer::brewer.pal(9, "Set1")[2]),
   ylim = c(200, 30000),
-  filename = "output/SuppsFig1/FigS3A_CD8.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig4A_CD8.pdf",
   show_x_text = TRUE,
   width_pt = 124,
   height_pt = 71
@@ -1160,9 +1288,9 @@ fig_cd8_exp
 fig_cd11c_exp <- plot_violin_by_condition(
   df_cd11c_condition,
   aes_fill = "Marker",
-  fill_values = RColorBrewer::brewer.pal(9, "Set1")[c(5, 2)],
+  fill_values = c("#e25726", RColorBrewer::brewer.pal(9, "Set1")[2]),
   ylim = c(1000, 30000),
-  filename = "output/SuppsFig1/FigS3A_CD11c.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig4A_CD11c.pdf",
   show_x_text = TRUE,
   width_pt = 124,
   height_pt = 71
@@ -1175,7 +1303,7 @@ fig_cd69_exp <- plot_violin_by_condition(
   fill_values = RColorBrewer::brewer.pal(9, "Set1")[2],
   ylim = c(10000, 30000),
   y_breaks = c(10000, 30000),
-  filename = "output/SuppsFig1/FigS3A_CD69.pdf",
+  filename = "output/ExtendedDataForFig1/ExtendedDataFig4A_CD69.pdf",
   show_x_text = TRUE,
   width_pt = 124,
   height_pt = 71
