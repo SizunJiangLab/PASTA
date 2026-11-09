@@ -56,4 +56,4 @@ For inquiries regarding this repository, please contact Sizun Jiang ([sjiang3@bi
 ## Citation
 
 To cite this work, please cite:
-Michel et al. (2025), "PASTA: Versatile Tyramide-oligonucleotide Amplification for Multi-modal Spatial Biology", bioRxiv, 2025.04.30.651463; doi: 10.1101/2025.04.30.651463
+Michel, H.A. et al. "PASTA: versatile tyramide-oligonucleotide amplification for multimodal spatial biology". Nat Methods 23, 1769–1774 (2026). https://doi.org/10.1038/s41592-026-03200-z
